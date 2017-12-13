@@ -75,9 +75,9 @@ dependencies {
     // CorDapp dependencies
     // Specify your CorDapp's dependencies below, including dependent CorDapps.
     // We've defined Cash as a dependent CorDapp as an example.
-    cordapp project(":cordapp")
     cordapp project(":cordapp-contracts-states")
-    cordapp project(":cordapp-bank")
+    cordapp project(":cordapp-central-bank")
+    cordapp project(":cordapp-deposit-scheme")
     cordapp "net.corda:corda-finance:$corda_release_version"
 }
 
@@ -105,19 +105,60 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
         rpcPort 10003
         cordapps = [
                 "$project.group:cordapp-contracts-states:$project.version",
-                "$project.group:cordapp:$project.version",
                 "net.corda:corda-finance:$corda_release_version"
         ]
     }
     node {
-        name "O=PartyA,L=London,C=GB"
+        name "O=CentralBank,L=London,C=GB"
         advertisedServices = []
         p2pPort 10005
         rpcPort 10006
         webPort 10007
         cordapps = [
                 "$project.group:cordapp-contracts-states:$project.version",
-                "$project.group:cordapp-bank:$project.version",
+                "$project.group:cordapp-central-bank:$project.version",
+                "net.corda:corda-finance:$corda_release_version"
+        ]
+        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
+    }
+
+    node {
+        name "O=Tenant,L=London,C=GB"
+        advertisedServices = []
+        p2pPort 10008
+        rpcPort 10009
+//        webPort 10010
+        cordapps = [
+                "$project.group:cordapp-contracts-states:$project.version",
+                "$project.group:cordapp-deposit-scheme:$project.version",
+                "net.corda:corda-finance:$corda_release_version"
+        ]
+        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
+    }
+
+    node {
+        name "O=Landlord,L=London,C=GB"
+        advertisedServices = []
+        p2pPort 10011
+        rpcPort 10012
+//        webPort 10013
+        cordapps = [
+                "$project.group:cordapp-contracts-states:$project.version",
+                "$project.group:cordapp-deposit-scheme:$project.version",
+                "net.corda:corda-finance:$corda_release_version"
+        ]
+        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
+    }
+
+    node {
+        name "O=SuperSecureDepositCo,L=London,C=GB"
+        advertisedServices = []
+        p2pPort 10020
+        rpcPort 10021
+        webPort 10022
+        cordapps = [
+                "$project.group:cordapp-contracts-states:$project.version",
+                "$project.group:cordapp-deposit-scheme:$project.version",
                 "net.corda:corda-finance:$corda_release_version"
         ]
         rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]

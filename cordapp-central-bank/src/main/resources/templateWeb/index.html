@@ -1,0 +1,40 @@
+<!-- Define your frontend here. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Template CorDapp</title>
+</head>
+<body onload="onLoad()">
+<div>Issue:
+    <label for="amount">amount</label>
+    <input type="number" id="amount" pattern="[-+]?[0-9]*[.,]?[0-9]+">
+    <label for="currency">Currency</label>
+    <select id="currency">
+        <option>GBP</option>
+    </select>
+    <button onclick="doClick()">Issue!</button>
+</div>
+Transfer:
+  <label for="xferAmount">amount</label>
+  <input type="number" id="xferAmount" pattern="[-+]?[0-9]*[.,]?[0-9]+">
+  <label for="xferCurrency">Currency</label>
+  <select id="xferCurrency">
+      <option>GBP</option>
+  </select>
+
+  <select id="peerDropDown">
+  </select>
+
+  <button onclick="sendTransferRequest()">transfer!</button>
+
+<div>
+
+
+
+</div>
+
+</body>
+<script type="text/javascript" src="/web/js/asynchelper.js"></script>
+<script type="text/javascript" src="helperjs.js"></script>
+</html>

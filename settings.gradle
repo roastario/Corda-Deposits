@@ -1,4 +1,3 @@
-include 'cordapp'
 include 'cordapp-contracts-states'
-include 'cordapp-bank'
+include 'cordapp-central-bank'
 include 'cordapp-deposit-scheme'
