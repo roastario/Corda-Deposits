@@ -89,4 +89,20 @@ object DepositIssueFlow {
         }
     }
 
+    @InitiatingFlow
+    @InitiatedBy(Initiator::class)
+    class Responder(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
+        @Suspendable
+        override fun call(): SignedTransaction {
+            val flow = object : SignTransactionFlow(counterpartySession) {
+                @Suspendable
+                override fun checkTransaction(stx: SignedTransaction) {
+                    // We check the oracle is a required signer. If so, we can trust the spot price and volatility data.
+                }
+            }
+            val stx = subFlow(flow)
+            return waitForLedgerCommit(stx.id)
+        }
+    }
+
 }
