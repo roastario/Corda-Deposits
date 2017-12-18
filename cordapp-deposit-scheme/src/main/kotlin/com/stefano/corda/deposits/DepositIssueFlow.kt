@@ -2,16 +2,12 @@ package com.stefano.corda.deposits
 
 import co.paralleluniverse.fibers.Suspendable
 import com.stefano.corda.deposits.DepositContract.Companion.IOU_CONTRACT_ID
-import net.corda.core.contracts.Amount
 import net.corda.core.contracts.Command
 import net.corda.core.contracts.StateAndContract
 import net.corda.core.flows.*
-import net.corda.core.identity.Party
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
-import java.util.*
-import kotlin.collections.ArrayList
 
 object DepositIssueFlow {
     @InitiatingFlow
@@ -58,13 +54,14 @@ object DepositIssueFlow {
 
             val landlord = depositState.landlord;
             val tenant = depositState.tenant;
-            val txCommand = Command(
+            val fundCommand = Command(
                     DepositContract.Commands.Create(depositState.propertyId),
                     listOf(landlord, tenant).map { it.owningKey }
             )
 
-
-            val txBuilder = TransactionBuilder(notary).withItems(StateAndContract(depositState, IOU_CONTRACT_ID), txCommand)
+            val txBuilder = TransactionBuilder(notary)
+                    .withItems(StateAndContract(depositState, IOU_CONTRACT_ID), fundCommand)
+                    .addAttachment(depositState.inventory)
 
             // Stage 2.
             progressTracker.currentStep = VERIFYING_TRANSACTION
@@ -97,7 +94,7 @@ object DepositIssueFlow {
             val flow = object : SignTransactionFlow(counterpartySession) {
                 @Suspendable
                 override fun checkTransaction(stx: SignedTransaction) {
-                    // We check the oracle is a required signer. If so, we can trust the spot price and volatility data.
+                    //all checks delegated to contract
                 }
             }
             val stx = subFlow(flow)

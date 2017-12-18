@@ -9,6 +9,28 @@ async function asyncPost(data, url, responseTransform, timeout){
   return asyncDo("POST", data, url, responseTransform, timeout)
 }
 
+
+async function asyncDownload(url){
+  return new Promise( (resolve, reject) => {
+    var xhr = new XMLHttpRequest();
+    xhr.responseType = 'arraybuffer';
+    xhr.open('GET', url, true);
+    xhr.onload = function (e) {
+      if (xhr.readyState === 4) {
+        if (xhr.status === HTTP_OK || xhr.status === HTTP_OK_CREATED) {
+          resolve(xhr.response);
+        } else {
+          reject(xhr.statusText);
+        }
+      }
+    };
+    xhr.onerror = function (e) {
+      reject(xhr.statusText);
+    };
+    xhr.send();
+  })
+}
+
 async function asyncDo(method, data, url, responseTransform, timeout){
 
   return new Promise( (resolve, reject) => {

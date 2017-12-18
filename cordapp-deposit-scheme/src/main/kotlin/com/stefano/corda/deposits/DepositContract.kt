@@ -17,7 +17,29 @@ open class DepositContract : Contract {
      * considered valid.
      */
     override fun verify(tx: LedgerTransaction) {
-        val command = tx.commands.requireSingleCommand<Commands.Create>()
+        val command = tx.commands.requireSingleCommand<Commands>()
+
+        when (command.value){
+            is Commands.Create -> {
+                requireThat {
+
+                    val depositInputs =  tx.inputsOfType<DepositState>()
+                    "there must be no deposit input states, this is the initial one" using (depositInputs.isEmpty())
+                    "there must be no input states at all" using tx.inputStates.isEmpty()
+
+                    val depositStates = tx.outputsOfType<DepositState>()
+                    "there must be only one deposit output state" using (depositStates.size == 1)
+                    "there must be only one output state" using (tx.outputs.size == 1)
+
+                    val outputState = depositStates.first()
+                    "the landlord and tenants must be different" using (outputState.landlord != outputState.tenant)
+
+
+
+                }
+            }
+        }
+
         requireThat {
             // Generic constraints around the IOU transaction.
 //            "No inputs should be consumed when issuing an IOU." using (tx.inputs.isEmpty())
