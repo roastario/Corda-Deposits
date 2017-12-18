@@ -2,13 +2,20 @@ package com.stefano.corda.deposits.api
 
 import com.stefano.corda.deposits.DepositState
 import com.stefano.corda.deposits.FundDepositFlow
+import net.corda.core.contracts.FungibleAsset
+import net.corda.core.contracts.StateAndRef
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.crypto.SecureHash
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.messaging.CordaRPCOps
 import net.corda.core.messaging.startFlow
 import net.corda.core.messaging.vaultQueryBy
+import net.corda.core.node.services.Vault
+import net.corda.core.node.services.vault.QueryCriteria
+import net.corda.core.node.services.vault.Sort
+import net.corda.core.node.services.vault.builder
 import net.corda.core.utilities.getOrThrow
+import net.corda.finance.schemas.CashSchemaV1
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import javax.ws.rs.*
@@ -66,10 +73,26 @@ class TenantApi(val rpcOps: CordaRPCOps) {
         return Response.ok(attachmentStream).build();
     }
 
+    @GET
+    @Path("balance")
+    @Produces(MediaType.APPLICATION_JSON)
+    fun getCash() : List<Any>{
+        val sum = builder {
+            CashSchemaV1.PersistentCashState::pennies.sum(
+                    groupByColumns = listOf(CashSchemaV1.PersistentCashState::currency, CashSchemaV1.PersistentCashState::issuerRef),
+                    orderBy = Sort.Direction.DESC)
+        }
+        val criteria = QueryCriteria.VaultCustomQueryCriteria(sum)
+        val sums = rpcOps.vaultQueryBy<FungibleAsset<*>>(criteria).otherResults
+        return sums;
+    }
+
 
     @GET
     @Path("mydeposits")
     @Produces(MediaType.APPLICATION_JSON)
-    fun getDeposits() = rpcOps.vaultQueryBy<DepositState>().states.filter { it.state.data.tenant.name == myIdentities };
+    fun getDeposits(): List<StateAndRef<DepositState>> {
+        return rpcOps.vaultQueryBy<DepositState>(QueryCriteria.LinearStateQueryCriteria(status = Vault.StateStatus.UNCONSUMED)).states.filter { it.state.data.tenant.name == myIdentities };
+    }
 
 }

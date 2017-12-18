@@ -9,7 +9,7 @@ import net.corda.core.transactions.LedgerTransaction
 open class DepositContract : Contract {
     companion object {
         @JvmStatic
-        val IOU_CONTRACT_ID = "com.stefano.corda.deposits.DepositContract"
+        val DEPOSIT_CONTRACT_ID = "com.stefano.corda.deposits.DepositContract"
     }
 
     /**

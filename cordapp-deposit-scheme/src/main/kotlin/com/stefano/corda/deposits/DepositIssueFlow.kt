@@ -1,7 +1,6 @@
 package com.stefano.corda.deposits
 
 import co.paralleluniverse.fibers.Suspendable
-import com.stefano.corda.deposits.DepositContract.Companion.IOU_CONTRACT_ID
 import net.corda.core.contracts.Command
 import net.corda.core.contracts.StateAndContract
 import net.corda.core.flows.*
@@ -60,7 +59,7 @@ object DepositIssueFlow {
             )
 
             val txBuilder = TransactionBuilder(notary)
-                    .withItems(StateAndContract(depositState, IOU_CONTRACT_ID), fundCommand)
+                    .withItems(StateAndContract(depositState, DepositContract.DEPOSIT_CONTRACT_ID), fundCommand)
                     .addAttachment(depositState.inventory)
 
             // Stage 2.

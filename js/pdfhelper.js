@@ -45,7 +45,7 @@ function renderPdfBytesToHolder(typedArray, holderId, dialogId){
   });
 
   //set dialog size and open with canvases
-  pdfPromise.then(function(renderResult){
+  return pdfPromise.then(function(renderResult){
     $( function() {
       var w = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
       var h = Math.max(document.documentElement.clientHeight, window.innerHeight || 0);

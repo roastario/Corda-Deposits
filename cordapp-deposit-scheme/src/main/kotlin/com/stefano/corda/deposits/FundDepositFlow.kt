@@ -1,10 +1,13 @@
 package com.stefano.corda.deposits
 
 import co.paralleluniverse.fibers.Suspendable
-import com.stefano.corda.deposits.DepositContract.Companion.IOU_CONTRACT_ID
-import net.corda.core.contracts.*
+import net.corda.core.contracts.Command
+import net.corda.core.contracts.ContractState
+import net.corda.core.contracts.StateAndRef
+import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.flows.*
 import net.corda.core.node.ServiceHub
+import net.corda.core.node.services.Vault
 import net.corda.core.node.services.queryBy
 import net.corda.core.node.services.vault.QueryCriteria
 import net.corda.core.transactions.SignedTransaction
@@ -13,7 +16,7 @@ import net.corda.core.utilities.ProgressTracker
 import net.corda.finance.contracts.asset.Cash
 
 inline fun <reified T : ContractState> ServiceHub.getStateAndRefByLinearId(linearId: UniqueIdentifier): StateAndRef<T> {
-    val queryCriteria = QueryCriteria.LinearStateQueryCriteria(linearId = listOf(linearId))
+    val queryCriteria = QueryCriteria.LinearStateQueryCriteria(linearId = listOf(linearId), status = Vault.StateStatus.UNCONSUMED)
     return vaultService.queryBy<T>(queryCriteria).states.single()
 }
 
@@ -69,14 +72,16 @@ object FundDepositFlow {
 
             require(tenant == ourIdentity) { "Funding of a deposit must be initiated by the tenant." }
 
-            val issueCommand = Command(
+            val fundCommand = Command(
                     DepositContract.Commands.Fund(refAndState.state.data.propertyId),
                     listOf(landlord, tenant).map { it.owningKey }
             )
 
             val copy = refAndState.state.data.copy(amountDeposited = refAndState.state.data.depositAmount)
             val txBuilder = TransactionBuilder(notary)
-                    .withItems(StateAndContract(copy, IOU_CONTRACT_ID), issueCommand)
+                    .addInputState(refAndState)
+                    .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)
+                    .addCommand(fundCommand)
 
 
             progressTracker.currentStep = GENERATING_CASH_MOVEMENT

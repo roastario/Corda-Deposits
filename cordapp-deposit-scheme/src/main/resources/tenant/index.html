@@ -5,15 +5,27 @@
     <meta charset="UTF-8">
     <title>Super Secure Deposts</title>
 </head>
-<body onload="getDeposits()">
+<body onload="getDeposits() ; getBalance()">
 
 <div>
     <h1>Welcome Tenant</h1>
 </div>
 
+<div id="balanceHolder" align="right">
+
+    Your Balance is: <span id="balance"></span>
+
+</div>
+
 <div>
     <h2>Your unfunded Deposits</h2>
-    <table id="depositTable">
+    <table id="unfundedDepositTable">
+    </table>
+</div>
+
+<div>
+    <h2>Your unfunded Deposits</h2>
+    <table id="fundedDepositTable">
     </table>
 </div>
 

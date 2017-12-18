@@ -1,15 +1,31 @@
 function onload(){
-  getDeposits();
+    getBalance();
+    getDeposits();
+}
+
+function getBalance(){
+
+    asyncGet('/api/tenantOps/balance', JSON.parse).then(function(balances){
+      let numericBalance = balances[0];
+      document.getElementById('balance').innerHTML = "£" + (numericBalance/100);
+      return numericBalance;
+    }).then(function(balancesByCurrency){
+      console.log(balancesByCurrency);
+    });
 }
 
 function getDeposits(){
-  asyncGet('/api/tenantOps/mydeposits', JSON.parse).then(populateDepositTable);
+  asyncGet('/api/tenantOps/mydeposits', JSON.parse).then(function(loadedDeposits){
+    return loadedDeposits.filter(deposit => deposit.state.data.amountDeposited.startsWith("0"));
+  }).then(populateUnfundedDepositTable);
 }
 
-function loadAndShowInventory(inventoryHash){
+function loadAndShowInventory(inventoryHash, buttonToEnable){
   asyncDownload('/api/tenantOps/inventory?attachmentId='+inventoryHash).then(function(data){
       let typedArray = (new Uint8Array(data));
-      renderPdfBytesToHolder(typedArray, 'pdfHolder', 'dialog')
+      return renderPdfBytesToHolder(typedArray, 'pdfHolder', 'dialog')
+  }).then(function(pdfRender){
+    buttonToEnable.disabled = false;
   })
 }
 
@@ -19,9 +35,9 @@ function fundDeposit(uniqueId){
     })
 }
 
-function populateDepositTable(loadedDeposits){
+function populateUnfundedDepositTable(loadedDeposits){
 
-  let table = document.getElementById('depositTable');
+  let table = document.getElementById('unfundedDepositTable');
   table.innerHTML = "";
 
   loadedDeposits.forEach(function(depositState){
@@ -33,11 +49,6 @@ function populateDepositTable(loadedDeposits){
 
     let showInventoryCell = document.createElement('td');
     let showInventoryButton = document.createElement('button');
-    showInventoryButton.innerHTML = "Show Inventory";
-    showInventoryCell.appendChild(showInventoryButton);
-    showInventoryButton.onclick = function(){
-      loadAndShowInventory(loadedDeposit.inventory)
-    };
 
     let fundDepositCell = document.createElement('td');
     let fundDepositButton = document.createElement('button');
@@ -46,6 +57,15 @@ function populateDepositTable(loadedDeposits){
     fundDepositButton.onclick = function(){
       fundDeposit(loadedDeposit.linearId);
     }
+    fundDepositButton.disabled = true;
+
+    showInventoryButton.innerHTML = "Show Inventory";
+    showInventoryCell.appendChild(showInventoryButton);
+    showInventoryButton.onclick = function(){
+      loadAndShowInventory(loadedDeposit.inventory, fundDepositButton)
+    };
+
+
 
     propertyIdCell.innerHTML = loadedDeposit.propertyId;
     landlordCell.innerHTML = loadedDeposit.landlord;
