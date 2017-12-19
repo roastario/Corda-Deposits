@@ -1,6 +1,6 @@
 package com.template
 
-import com.stefano.corda.deposits.api.DepositApi
+import com.stefano.corda.deposits.api.LandlordApi
 import com.stefano.corda.deposits.api.TenantApi
 import net.corda.core.messaging.CordaRPCOps
 import net.corda.core.serialization.SerializationWhitelist
@@ -12,7 +12,7 @@ import java.util.function.Function
 // ***********
 class TemplateWebPlugin : WebServerPluginRegistry {
     // A list of classes that expose web JAX-RS REST APIs.
-    override val webApis: List<Function<CordaRPCOps, out Any>> = listOf(Function(::DepositApi), Function(::TenantApi))
+    override val webApis: List<Function<CordaRPCOps, out Any>> = listOf(Function(::LandlordApi), Function(::TenantApi))
     //A list of directories in the resources directory that will be served by Jetty under /web.
     // This template's web frontend is accessible at /web/template.
     override val staticServeDirs: Map<String, String> = mapOf(

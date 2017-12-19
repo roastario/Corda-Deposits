@@ -1,6 +1,8 @@
-package com.stefano.corda.deposits
+package com.stefano.corda.deposits.flow
 
 import co.paralleluniverse.fibers.Suspendable
+import com.stefano.corda.deposits.DepositContract
+import com.stefano.corda.deposits.DepositState
 import net.corda.core.contracts.Command
 import net.corda.core.contracts.StateAndContract
 import net.corda.core.flows.*

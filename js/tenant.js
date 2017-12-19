@@ -16,16 +16,32 @@ function getBalance(){
 
 function getDeposits(){
   asyncGet('/api/tenantOps/mydeposits', JSON.parse).then(function(loadedDeposits){
-    return loadedDeposits.filter(deposit => deposit.state.data.amountDeposited.startsWith("0"));
-  }).then(populateUnfundedDepositTable);
+    let fundedDeposits = [];
+    let unFundedDeposits = [];
+    loadedDeposits.forEach(deposit => {
+      if (deposit.state.data.amountDeposited.startsWith("0")){
+        unFundedDeposits.push(deposit.state.data)
+      }else{
+        fundedDeposits.push(deposit.state.data)
+      }
+    });
+    return {funded: fundedDeposits, unfunded: unFundedDeposits}
+  }).then(splitDeposits => {
+      populateFundedDepositTable(splitDeposits.funded);
+      populateUnfundedDepositTable(splitDeposits.unfunded);
+  });
 }
 
-function loadAndShowInventory(inventoryHash, buttonToEnable){
+
+
+function loadAndShowInventory(inventoryHash, postRender){
   asyncDownload('/api/tenantOps/inventory?attachmentId='+inventoryHash).then(function(data){
       let typedArray = (new Uint8Array(data));
       return renderPdfBytesToHolder(typedArray, 'pdfHolder', 'dialog')
   }).then(function(pdfRender){
-    buttonToEnable.disabled = false;
+    if (postRender) {
+      postRender();
+    };
   })
 }
 
@@ -35,13 +51,56 @@ function fundDeposit(uniqueId){
     })
 }
 
+function populateFundedDepositTable(loadedDeposits){
+  let table = document.getElementById('fundedDepositTable');
+  table.innerHTML = "";
+
+  loadedDeposits.forEach(function(depositState){
+    let loadedDeposit = depositState;
+    let row = document.createElement('tr');
+    let propertyIdCell = document.createElement('td');
+    let landlordCell = document.createElement('td');
+    let depositAmountCell = document.createElement('td');
+
+    let showInventoryCell = document.createElement('td');
+    let showInventoryButton = document.createElement('button');
+
+    let requestRefundCell = document.createElement('td');
+    let requestRefundButton = document.createElement('button');
+
+    requestRefundButton.innerHTML = "Request Refund";
+    requestRefundCell.appendChild(requestRefundButton);
+    requestRefundButton.onclick = function(){
+    }
+
+    showInventoryButton.innerHTML = "Show Inventory";
+    showInventoryCell.appendChild(showInventoryButton);
+    showInventoryButton.onclick = function(){
+      loadAndShowInventory(loadedDeposit.inventory)
+    };
+
+    propertyIdCell.innerHTML = loadedDeposit.propertyId;
+    landlordCell.innerHTML = loadedDeposit.landlord;
+    depositAmountCell.innerHTML = loadedDeposit.depositAmount;
+
+    row.appendChild(propertyIdCell);
+    row.appendChild(landlordCell);
+    row.appendChild(depositAmountCell);
+    row.appendChild(showInventoryCell);
+    row.appendChild(requestRefundCell);
+
+    table.appendChild(row);
+  })
+
+}
+
 function populateUnfundedDepositTable(loadedDeposits){
 
   let table = document.getElementById('unfundedDepositTable');
   table.innerHTML = "";
 
   loadedDeposits.forEach(function(depositState){
-    let loadedDeposit = depositState.state.data;
+    let loadedDeposit = depositState;
     let row = document.createElement('tr');
     let propertyIdCell = document.createElement('td');
     let landlordCell = document.createElement('td');
@@ -62,7 +121,9 @@ function populateUnfundedDepositTable(loadedDeposits){
     showInventoryButton.innerHTML = "Show Inventory";
     showInventoryCell.appendChild(showInventoryButton);
     showInventoryButton.onclick = function(){
-      loadAndShowInventory(loadedDeposit.inventory, fundDepositButton)
+      loadAndShowInventory(loadedDeposit.inventory, function(){
+        fundDepositButton.disabled = false;
+      })
     };
 
 

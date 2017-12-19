@@ -1,5 +1,6 @@
 async function onload(){
 
+  setupDialogs();
 
   let inventoryInput = document.getElementById('inventoryInput');
 
@@ -13,7 +14,7 @@ async function onload(){
       var viewPortInfo = {width: 0, height: 0}
       var arrayBuffer = this.result
       let typedArray = (new Uint8Array(arrayBuffer));
-      renderPdfBytesToHolder(typedArray, "pdfHolder", "dialog");
+      renderPdfBytesToHolder(typedArray, "pdfHolder", "pdfDialog");
     }
 
     fileReader.readAsArrayBuffer(selectedFile);
@@ -22,23 +23,49 @@ async function onload(){
   await loadPeers();
 }
 
+function setupDialogs(){
+  $( function() {
+    $( "#pdfDialog" ).dialog();
+  } );
+
+  $( function() {
+    $( "#pdfDialog" ).dialog("close");
+  } );
+
+  $("#depositStatusDialog").dialog({
+      autoOpen: true,
+      modal: true,
+      width: 'auto',
+      closeOnEscape: false,
+      draggable: false,
+      resizable: false,
+      buttons: {}
+  });
+
+
+  $( function() {
+    $( "#depositStatusDialog" ).dialog("close");
+  });
+}
+
 async function loadPeers(){
   return asyncGet('/api/depositOps/peers', function(json){
         let parsedPeers = JSON.parse(json);
-        return parsedPeers['peers'].filter(function(peer){
-            let lowerCaseName = peer.toLowerCase();
-            return lowerCaseName.includes('landlord') || lowerCaseName.includes('tenant')
-        });
+        return parsedPeers['peers'];
   }).then(function(loadedPeers){
         populateSelectWithItems(document.getElementById('tenantSelect'), loadedPeers);
-        populateSelectWithItems(document.getElementById('landlordSelect'), loadedPeers);
+        populateSelectWithItems(document.getElementById('schemeSelect'), loadedPeers);
   })
 }
 
 async function sendDepositRequest(){
 
+     $( function() {
+       $( "#depositStatusDialog" ).dialog("open");
+     } );
+
      let tenantX500 = document.getElementById('tenantSelect').selectedOptions[0].data.obj;
-     let landlordX500 = document.getElementById('landlordSelect').selectedOptions[0].data.obj;
+     let schemeX500Name = document.getElementById('schemeSelect').selectedOptions[0].data.obj;
 
      let amountOfDeposit = document.getElementById('amount').value;
      let propertyId = document.getElementById('propertyId').value;
@@ -46,14 +73,16 @@ async function sendDepositRequest(){
 
     return getInventoryBytes().then(function(loadedData){
       let depositRequest = {
-          'landlordX500Name': landlordX500,
+          'schemeX500Name': schemeX500Name,
           'tenantX500Name': tenantX500,
           'amount': amountOfDeposit,
           'propertyId': propertyId,
           'inventory': loadedData
       }
       return asyncPost(depositRequest, '/api/depositOps/createDeposit', function(resolvedResponse){
-        console.log(resolvedResponse);
+        $( function() {
+          $( "#depositStatusDialog" ).dialog("close");
+        } );
         return resolvedResponse;
       }, 10000);
     });

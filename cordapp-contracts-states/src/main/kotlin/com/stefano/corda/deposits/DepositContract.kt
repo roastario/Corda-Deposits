@@ -5,6 +5,8 @@ import net.corda.core.contracts.Contract
 import net.corda.core.contracts.requireSingleCommand
 import net.corda.core.contracts.requireThat
 import net.corda.core.transactions.LedgerTransaction
+import net.corda.finance.contracts.asset.Cash
+import net.corda.finance.flows.CashIssueAndPaymentFlow
 
 open class DepositContract : Contract {
     companion object {
@@ -33,23 +35,30 @@ open class DepositContract : Contract {
 
                     val outputState = depositStates.first()
                     "the landlord and tenants must be different" using (outputState.landlord != outputState.tenant)
-
-
-
                 }
             }
-        }
+            is Commands.Fund -> {
+                requireThat {
 
-        requireThat {
-            // Generic constraints around the IOU transaction.
-//            "No inputs should be consumed when issuing an IOU." using (tx.inputs.isEmpty())
-//            "Only one output state should be created." using (tx.outputs.size == 1)
-//            val out = tx.outputsOfType().single()
-//            "The lender and the borrower cannot be the same entity." using (out.lender != out.borrower)
-//            "All of the participants must be signers." using (command.signers.containsAll(out.participants.map { it.owningKey }))
+                    val depositInputStates =  tx.inputsOfType<DepositState>()
+                    val cashInputs =  tx.inputsOfType<Cash.State>()
+                    "there must be one incoming deposit input state" using (depositInputStates.size == 1)
+                    "there must be a cash input state" using (cashInputs.size == 1)
 
-            // IOU-specific constraints.
-//            "The IOU's value must be non-negative." using (out.value > 0)
+                    val depositOutputStates = tx.outputsOfType<DepositState>()
+                    val cashOutputStates = tx.outputsOfType<Cash.State>()
+                    "there must be only one deposit output state" using (depositInputStates.size == 1)
+
+                    val depositOutputState = depositOutputStates.first()
+                    val depositInputState = depositInputStates.first()
+                    val cashOutput = cashOutputStates.first()
+                    "the landlord on input and output state must be the same" using (depositOutputState.landlord == depositInputState.landlord)
+                    "the tenant on input and output state must be the same" using (depositOutputState.tenant == depositInputState.tenant)
+                    "the deposit amount must be the same on input and output" using (depositOutputState.depositAmount == depositInputState.depositAmount)
+                    "the cash amount sent must equal the deposited amount" using (depositOutputState.amountDeposited.quantity == cashOutput.amount.quantity)
+                    "the cash amount must be sent to the deposit backing scheme" using (cashOutput.owner == depositOutputState.issuer)
+                }
+            }
         }
     }
 

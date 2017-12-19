@@ -59,22 +59,20 @@ object FundDepositFlow {
         @Suspendable
         override fun call(): SignedTransaction {
 
-            // Obtain a reference to the notary we want to use.
             val notary = serviceHub.networkMapCache.notaryIdentities[0]
 
-            // Stage 1.
             progressTracker.currentStep = FINDING_STATE
             val refAndState = serviceHub.getStateAndRefByLinearId<DepositState>(linearId = depositId);
-            // Generate an unsigned transaction.
 
             val landlord = refAndState.state.data.landlord;
             val tenant = refAndState.state.data.tenant;
+            val depositIssuer = refAndState.state.data.issuer;
 
             require(tenant == ourIdentity) { "Funding of a deposit must be initiated by the tenant." }
 
             val fundCommand = Command(
                     DepositContract.Commands.Fund(refAndState.state.data.propertyId),
-                    listOf(landlord, tenant).map { it.owningKey }
+                    listOf(landlord, tenant, depositIssuer).map { it.owningKey }
             )
 
             val copy = refAndState.state.data.copy(amountDeposited = refAndState.state.data.depositAmount)
@@ -85,23 +83,20 @@ object FundDepositFlow {
 
 
             progressTracker.currentStep = GENERATING_CASH_MOVEMENT
-            Cash.generateSpend(serviceHub, txBuilder, refAndState.state.data.depositAmount, landlord)
+            Cash.generateSpend(serviceHub, txBuilder, refAndState.state.data.depositAmount, depositIssuer)
 
-            // Stage 2.
-            progressTracker.currentStep = FINDING_STATE
-            // Verify that the transaction is valid.
+            progressTracker.currentStep = VERIFYING_TRANSACTION
             txBuilder.verify(serviceHub)
 
-            // Stage 3.
             progressTracker.currentStep = SIGNING_TRANSACTION
-            // Sign the transaction.
             val partSignedTx = serviceHub.signInitialTransaction(txBuilder)
 
-            // Stage 4.
             val landLordFlow = initiateFlow(landlord)
             val tenantFlow = initiateFlow(tenant)
+            val issuerFlow = initiateFlow(depositIssuer)
+
             progressTracker.currentStep = GATHERING_SIGS
-            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(landLordFlow, tenantFlow),
+            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(landLordFlow, issuerFlow, tenantFlow),
                     GATHERING_SIGS.childProgressTracker()))
 
             // Stage 5.

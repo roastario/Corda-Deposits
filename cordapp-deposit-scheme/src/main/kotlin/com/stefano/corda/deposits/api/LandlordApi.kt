@@ -19,7 +19,7 @@ import javax.ws.rs.core.MediaType
 import javax.ws.rs.core.Response
 
 @Path("depositOps")
-class DepositApi(val rpcOps: CordaRPCOps) {
+class LandlordApi(val rpcOps: CordaRPCOps) {
 
     val myIdentities = rpcOps.nodeInfo().legalIdentities.map { it.name };
 
@@ -45,10 +45,10 @@ class DepositApi(val rpcOps: CordaRPCOps) {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     fun issueUnfunded(request: DepositRequest): Response {
-        val landlord = rpcOps.wellKnownPartyFromX500Name(request.landlordX500Name) ?: throw IllegalArgumentException("Unknown landlord.")
+        val scheme = rpcOps.wellKnownPartyFromX500Name(request.schemeX500Name) ?: throw IllegalArgumentException("Unknown scheme.")
         val tenant = rpcOps.wellKnownPartyFromX500Name(request.tenantX500Name) ?: throw IllegalArgumentException("Unknown tenant.")
-        val depositScheme = rpcOps.nodeInfo().legalIdentities.first();
-        val inventoryHash = uploadInventory(request.inventory)
+        val landlord = rpcOps.nodeInfo().legalIdentities.first();
+        val inventoryHash = uploadInventory(request.inventory);
         val depositState = DepositState(Amount(request.amount.toLong() * 100, Currency.getInstance("GBP")),
                 Amount(0, Currency.getInstance("GBP")),
                 Amount(0, Currency.getInstance("GBP")),
@@ -56,7 +56,7 @@ class DepositApi(val rpcOps: CordaRPCOps) {
                 listOf(),
                 landlord,
                 tenant,
-                depositScheme,
+                scheme,
                 request.propertyId,
                 inventoryHash
         )
@@ -89,7 +89,7 @@ class DepositApi(val rpcOps: CordaRPCOps) {
     @Produces(MediaType.APPLICATION_JSON)
     fun getDeposits() = rpcOps.vaultQueryBy<DepositState>().states;
 
-    data class DepositRequest(val landlordX500Name: CordaX500Name,
+    data class DepositRequest(val schemeX500Name: CordaX500Name,
                               val tenantX500Name: CordaX500Name,
                               val amount: Double,
                               val propertyId: String,
@@ -100,7 +100,7 @@ class DepositApi(val rpcOps: CordaRPCOps) {
 
             other as DepositRequest
 
-            if (landlordX500Name != other.landlordX500Name) return false
+            if (schemeX500Name != other.schemeX500Name) return false
             if (tenantX500Name != other.tenantX500Name) return false
             if (amount != other.amount) return false
             if (propertyId != other.propertyId) return false
@@ -110,7 +110,7 @@ class DepositApi(val rpcOps: CordaRPCOps) {
         }
 
         override fun hashCode(): Int {
-            var result = landlordX500Name.hashCode()
+            var result = schemeX500Name.hashCode()
             result = 31 * result + tenantX500Name.hashCode()
             result = 31 * result + amount.hashCode()
             result = 31 * result + propertyId.hashCode()
