@@ -20,7 +20,8 @@ async function onload(){
     fileReader.readAsArrayBuffer(selectedFile);
   }
 
-  await loadPeers();
+  loadPeers().then(getDeposits);
+
 }
 
 function setupDialogs(){
@@ -83,9 +84,189 @@ async function sendDepositRequest(){
         $( function() {
           $( "#depositStatusDialog" ).dialog("close");
         } );
+        getDeposits();
         return resolvedResponse;
       }, 10000);
     });
+}
+
+async function getDeposits(){
+
+    return asyncGet("/api/depositOps/deposits", JSON.parse).then((deposits) => {
+        return deposits.map((incoming) => {
+            return incoming.state.data;
+        })
+    }).then(function (extractedDeposits){
+
+        let unfundedDeposits = [];
+        let activeDeposits = [];
+        let depositsAwaitingRefunding = [];
+        let closedDeposits = [];
+
+        extractedDeposits.forEach(deposit => {
+            if (!deposit.amountDeposited){
+                unfundedDeposits.push(deposit);
+            }else if (!deposit.refundRequested){
+                activeDeposits.push(deposit);
+            }else if (!deposit.refunded){
+                depositsAwaitingRefunding.push(deposit);
+            }else{
+                closedDeposits.push(deposit);
+            }
+        })
+
+        populateDepositsToRefund(depositsAwaitingRefunding);
+        populateDepositsWaitingForFunding(unfundedDeposits);
+        populateActiveDeposits(activeDeposits);
+    });
+
+}
+
+function populateDepositsToRefund(deposits){
+
+    let holdingTable = document.getElementById("refundDeposits")
+    holdingTable.innerHTML = "";
+
+    deposits.forEach(deposit => {
+        let row = document.createElement('tr');
+        let propertyIdCell = document.createElement('td');
+        let tenantNameCell = document.createElement('td');
+        let depositAmountCell = document.createElement('td');
+
+
+        let inventoryButtonCell = document.createElement('td');
+        let inventoryButton = document.createElement('button');
+        inventoryButton.onclick = function(){
+            loadAndShowInventory(deposit.inventory);
+        }
+        inventoryButton.innerHTML = "Show inventory"
+        inventoryButtonCell.appendChild(inventoryButton)
+
+        let deductButtonCell = document.createElement('td');
+        let deductButton = document.createElement('button');
+        deductButton.onclick = function(){
+            beginDeduction(deposit.linearId);
+        }
+        deductButton.innerHTML = "Request Deduction"
+        deductButtonCell.appendChild(deductButton)
+
+        let refundButtonCell = document.createElement('td');
+        let refundButton = document.createElement('button');
+        refundButton.onclick = () => {
+            refundDeposit(deposit.linearId);
+        }
+        refundButton.innerHTML = "Release Refund"
+        refundButtonCell.appendChild(refundButton)
+
+        propertyIdCell.innerHTML = deposit.propertyId;
+        tenantNameCell.innerHTML = deposit.tenant;
+        depositAmountCell.innerHTML = deposit.depositAmount;
+
+        row.appendChild(propertyIdCell)
+        row.appendChild(depositAmountCell)
+        row.appendChild(tenantNameCell)
+
+        row.appendChild(inventoryButtonCell)
+        row.appendChild(deductButtonCell)
+        row.appendChild(refundButtonCell)
+
+        holdingTable.appendChild(row);
+    })
+
+}
+
+
+function populateDepositsWaitingForFunding(deposits){
+
+    let holdingTable = document.getElementById("unfundedDeposits")
+    holdingTable.innerHTML = "";
+
+
+    deposits.forEach(deposit => {
+        let row = document.createElement('tr');
+        let propertyIdCell = document.createElement('td');
+        let tenantNameCell = document.createElement('td');
+        let depositAmountCell = document.createElement('td');
+
+
+        let inventoryButtonCell = document.createElement('td');
+        let inventoryButton = document.createElement('button');
+        inventoryButton.onclick = function(){
+            loadAndShowInventory(deposit.inventory);
+        }
+        inventoryButton.innerHTML = "Show inventory"
+        inventoryButtonCell.appendChild(inventoryButton)
+
+
+
+        let cancelButtonCell = document.createElement('td');
+        let cancelButton = document.createElement('button');
+        cancelButton.onclick = () => {
+            cancelDeposit(deposit.linearId);
+        }
+        cancelButton.innerHTML = "Cancel Funding Request"
+        cancelButtonCell.appendChild(cancelButton)
+
+        propertyIdCell.innerHTML = deposit.propertyId;
+        tenantNameCell.innerHTML = deposit.tenant;
+        depositAmountCell.innerHTML = deposit.depositAmount;
+
+        row.appendChild(propertyIdCell)
+        row.appendChild(depositAmountCell)
+        row.appendChild(tenantNameCell)
+
+        row.appendChild(inventoryButtonCell)
+        row.appendChild(cancelButtonCell)
+
+        holdingTable.appendChild(row);
+    })
+
+}
+
+function populateActiveDeposits(deposits){
+
+    let holdingTable = document.getElementById("activeDeposits")
+    holdingTable.innerHTML = "";
+
+
+    deposits.forEach(deposit => {
+        let row = document.createElement('tr');
+        let propertyIdCell = document.createElement('td');
+        let tenantNameCell = document.createElement('td');
+        let depositAmountCell = document.createElement('td');
+
+        propertyIdCell.innerHTML = deposit.propertyId;
+        tenantNameCell.innerHTML = deposit.tenant;
+        depositAmountCell.innerHTML = deposit.depositAmount;
+
+        row.appendChild(propertyIdCell)
+        row.appendChild(depositAmountCell)
+        row.appendChild(tenantNameCell)
+        holdingTable.appendChild(row);
+    })
+
+}
+
+function loadAndShowInventory(inventoryHash, postRender){
+  asyncDownload('/api/depositOps/inventory?attachmentId='+inventoryHash).then(function(data){
+      let typedArray = (new Uint8Array(data));
+      return renderPdfBytesToHolder(typedArray, 'pdfHolder', 'pdfDialog')
+  }).then(function(pdfRender){
+    if (postRender) {
+      postRender();
+    };
+  })
+}
+
+function refundDeposit(depositId){
+    console.log("refunding: " + depositId);
+    return asyncPost(depositId, '/api/depositOps/refund', function(resolvedResponse){
+            getDeposits();
+            return resolvedResponse;
+    }, 10000);
+}
+
+function beginDeduction(depositId){
 }
 
 async function getInventoryBytes(){

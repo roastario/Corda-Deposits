@@ -1,3 +1,5 @@
 include 'cordapp-contracts-states'
 include 'cordapp-central-bank'
 include 'cordapp-deposit-scheme'
+include 'cordapp-landlord'
+include 'cordapp-tenant'

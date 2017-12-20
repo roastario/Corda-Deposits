@@ -1,23 +1,30 @@
-package com.stefano.corda.deposits
+package com.stefano.corda.deposits.flow
 
 import co.paralleluniverse.fibers.Suspendable
+import com.stefano.corda.deposits.DepositContract
+import com.stefano.corda.deposits.DepositState
+import com.stefano.corda.deposits.flow.FundDepositFlow.getStateAndRefByLinearId
 import net.corda.core.contracts.Command
-import net.corda.core.contracts.StateAndContract
+import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.flows.*
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
+import java.time.Instant
 
-object DepositIssueFlow {
+object RequestDepositRefundFlow {
+    //this will be responsible for unlocking the cash
+
     @InitiatingFlow
     @StartableByRPC
-    class Initiator(val depositState: DepositState) : FlowLogic<SignedTransaction>() {
-        /**
-         * The progress tracker checkpoints each stage of the flow and outputs the specified messages when each
-         * checkpoint is reached in the code. See the 'progressTracker.currentStep' expressions within the call() function.
-         */
+    class Initiator(val depositId: UniqueIdentifier) : FlowLogic<SignedTransaction>() {
+
+        override val progressTracker = tracker()
+
+
         companion object {
-            object GENERATING_TRANSACTION : ProgressTracker.Step("Generating transaction based on new deposit contract")
+            object FINDING_STATE : ProgressTracker.Step("Locating unfunded deposit to fund")
+            object UPDATING_STATE : ProgressTracker.Step("Verifying contract constraints.")
             object VERIFYING_TRANSACTION : ProgressTracker.Step("Verifying contract constraints.")
             object SIGNING_TRANSACTION : ProgressTracker.Step("Signing transaction with our private key.")
             object GATHERING_SIGS : ProgressTracker.Step("Gathering the counterparty's signature.") {
@@ -29,7 +36,8 @@ object DepositIssueFlow {
             }
 
             fun tracker() = ProgressTracker(
-                    GENERATING_TRANSACTION,
+                    FINDING_STATE,
+                    UPDATING_STATE,
                     VERIFYING_TRANSACTION,
                     SIGNING_TRANSACTION,
                     GATHERING_SIGS,
@@ -37,56 +45,48 @@ object DepositIssueFlow {
             )
         }
 
-        override val progressTracker = tracker()
-
-        /**
-         * The flow logic is encapsulated within the call() method.
-         */
         @Suspendable
         override fun call(): SignedTransaction {
-            // Obtain a reference to the notary we want to use.
             val notary = serviceHub.networkMapCache.notaryIdentities[0]
 
-            // Stage 1.
-            progressTracker.currentStep = GENERATING_TRANSACTION
-            // Generate an unsigned transaction.
+            progressTracker.currentStep = FINDING_STATE
+            val refAndState = serviceHub.getStateAndRefByLinearId<DepositState>(linearId = depositId);
 
-            val landlord = depositState.landlord;
-            val tenant = depositState.tenant;
-            val depositScheme = depositState.issuer;
+            val landlord = refAndState.state.data.landlord;
+            val tenant = refAndState.state.data.tenant;
 
-            val fundCommand = Command(
-                    DepositContract.Commands.Create(depositState.propertyId),
-                    listOf(landlord, tenant, depositScheme).map { it.owningKey }
+            require(tenant == ourIdentity) { "Refunding of a deposit must be initiated by the tenant." }
+
+            val requestRefundCommand = Command(
+                    DepositContract.Commands.Refund(refAndState.state.data.propertyId),
+                    listOf(landlord, tenant).map { it.owningKey }
             )
+            progressTracker.currentStep = UPDATING_STATE;
 
+            val copy = refAndState.state.data.copy(refundRequested = Instant.now())
             val txBuilder = TransactionBuilder(notary)
-                    .withItems(StateAndContract(depositState, DepositContract.DEPOSIT_CONTRACT_ID), fundCommand)
-                    .addAttachment(depositState.inventory)
+                    .addInputState(refAndState)
+                    .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)
+                    .addCommand(requestRefundCommand)
 
-            // Stage 2.
             progressTracker.currentStep = VERIFYING_TRANSACTION
-            // Verify that the transaction is valid.
             txBuilder.verify(serviceHub)
 
-            // Stage 3.
             progressTracker.currentStep = SIGNING_TRANSACTION
-            // Sign the transaction.
             val partSignedTx = serviceHub.signInitialTransaction(txBuilder)
 
-            val sessionsToCollectFrom = listOf(landlord, tenant, depositScheme).filter { it != ourIdentity }
-                    .map { initiateFlow(it) }
-                    .toSet()
+            val landLordFlow = initiateFlow(landlord)
 
             progressTracker.currentStep = GATHERING_SIGS
-            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, sessionsToCollectFrom,
+            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(landLordFlow),
                     GATHERING_SIGS.childProgressTracker()))
-
             // Stage 5.
             progressTracker.currentStep = FINALISING_TRANSACTION
             return subFlow(FinalityFlow(fullySignedTx, FINALISING_TRANSACTION.childProgressTracker()))
         }
+
     }
+
 
     @InitiatingFlow
     @InitiatedBy(Initiator::class)
@@ -100,8 +100,10 @@ object DepositIssueFlow {
                 }
             }
             val stx = subFlow(flow)
-            return waitForLedgerCommit(stx.id)
+            return waitForLedgerCommit(stx.id);
         }
+
     }
+
 
 }

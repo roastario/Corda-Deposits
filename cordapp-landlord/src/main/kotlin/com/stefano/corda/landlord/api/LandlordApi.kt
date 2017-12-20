@@ -1,8 +1,11 @@
-package com.stefano.corda.deposits.api
+package com.stefano.corda.landlord.api
 
-import com.stefano.corda.deposits.DepositIssueFlow
 import com.stefano.corda.deposits.DepositState
+import com.stefano.corda.deposits.flow.DepositIssueFlow
+import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
+import com.stefano.corda.deposits.utils.getInventory
 import net.corda.core.contracts.Amount
+import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.crypto.SecureHash
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.messaging.CordaRPCOps
@@ -21,7 +24,6 @@ import javax.ws.rs.core.Response
 @Path("depositOps")
 class LandlordApi(val rpcOps: CordaRPCOps) {
 
-    val myIdentities = rpcOps.nodeInfo().legalIdentities.map { it.name };
 
 
     @GET
@@ -50,19 +52,32 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
         val landlord = rpcOps.nodeInfo().legalIdentities.first();
         val inventoryHash = uploadInventory(request.inventory);
         val depositState = DepositState(Amount(request.amount.toLong() * 100, Currency.getInstance("GBP")),
-                Amount(0, Currency.getInstance("GBP")),
-                Amount(0, Currency.getInstance("GBP")),
-                Amount(0, Currency.getInstance("GBP")),
-                listOf(),
+                null,
+                null,
+                null,
+                null,
                 landlord,
                 tenant,
                 scheme,
                 request.propertyId,
+                null,
+                null,
                 inventoryHash
         )
         val flowHandle = rpcOps.startFlow(DepositIssueFlow::Initiator, depositState);
         val result = flowHandle.returnValue.getOrThrow();
         return Response.status(Response.Status.CREATED).entity(result).build();
+    }
+
+    @POST
+    @Path("refund")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    fun refund(linearId: UniqueIdentifier): Response{
+        val flowHandle = rpcOps.startFlow(ProcessDepositRefundFlow::Initiator, linearId);
+        val result = flowHandle.returnValue.getOrThrow();
+        return Response.status(Response.Status.OK).entity(result).build();
+
     }
 
 
@@ -77,7 +92,7 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
             zippedOutputStream.flush();
             zippedOutputStream.close();
             return rpcOps.uploadAttachment(ByteArrayInputStream(outputStream.toByteArray()));
-        }finally{
+        } finally {
             inputStream.close();
             outputStream.close();
         }
@@ -88,6 +103,14 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @Path("deposits")
     @Produces(MediaType.APPLICATION_JSON)
     fun getDeposits() = rpcOps.vaultQueryBy<DepositState>().states;
+
+
+    @GET
+    @Path("inventory")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    fun getInventory(@QueryParam("attachmentId") attachmentId: String):Response {
+        return Response.ok(rpcOps.getInventory(attachmentId)).build();
+    }
 
     data class DepositRequest(val schemeX500Name: CordaX500Name,
                               val tenantX500Name: CordaX500Name,
@@ -118,5 +141,4 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
             return result
         }
     };
-
 }

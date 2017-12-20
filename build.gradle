@@ -78,6 +78,8 @@ dependencies {
     cordapp project(":cordapp-contracts-states")
     cordapp project(":cordapp-central-bank")
     cordapp project(":cordapp-deposit-scheme")
+    cordapp project(":cordapp-landlord")
+    cordapp project(":cordapp-tenant")
     cordapp "net.corda:corda-finance:$corda_release_version"
 }
 
@@ -130,7 +132,7 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
         webPort 10010
         cordapps = [
                 "$project.group:cordapp-contracts-states:$project.version",
-                "$project.group:cordapp-deposit-scheme:$project.version",
+                "$project.group:cordapp-tenant:$project.version",
                 "net.corda:corda-finance:$corda_release_version"
         ]
         rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
@@ -144,7 +146,7 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
         webPort 10013
         cordapps = [
                 "$project.group:cordapp-contracts-states:$project.version",
-                "$project.group:cordapp-deposit-scheme:$project.version",
+                "$project.group:cordapp-landlord:$project.version",
                 "net.corda:corda-finance:$corda_release_version"
         ]
         rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]

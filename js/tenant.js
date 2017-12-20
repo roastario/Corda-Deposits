@@ -19,10 +19,10 @@ function getDeposits(){
     let fundedDeposits = [];
     let unFundedDeposits = [];
     loadedDeposits.forEach(deposit => {
-      if (deposit.state.data.amountDeposited.startsWith("0")){
-        unFundedDeposits.push(deposit.state.data)
-      }else{
+      if (deposit.state.data.amountDeposited){
         fundedDeposits.push(deposit.state.data)
+      }else{
+        unFundedDeposits.push(deposit.state.data)
       }
     });
     return {funded: fundedDeposits, unfunded: unFundedDeposits}
@@ -47,7 +47,12 @@ function loadAndShowInventory(inventoryHash, postRender){
 
 function fundDeposit(uniqueId){
     asyncPost(uniqueId, '/api/tenantOps/fundDeposit', JSON.parse, 10000).then(function(response){
-      console.log(response);
+      console.log("funded deposit: " + uniqueId);
+      return true;
+    }).then(function(){
+        onload();
+    }).catch(function(rejection){
+        console.log(rejection);
     })
 }
 
@@ -71,6 +76,7 @@ function populateFundedDepositTable(loadedDeposits){
     requestRefundButton.innerHTML = "Request Refund";
     requestRefundCell.appendChild(requestRefundButton);
     requestRefundButton.onclick = function(){
+        requestRefund(loadedDeposit.linearId);
     }
 
     showInventoryButton.innerHTML = "Show Inventory";
@@ -141,7 +147,17 @@ function populateUnfundedDepositTable(loadedDeposits){
 
     table.appendChild(row);
   })
+}
 
+async function requestRefund(uniqueId){
+        return asyncPost(uniqueId, '/api/tenantOps/refund', i => i, 10000).then(function(response){
+          console.log("requested refund for deposit: " + (uniqueId));
+          return true;
+        }).then(function(){
+            onload();
+        }).catch(function(rejection){
+            console.log(rejection);
+        })
 }
 
 async function loadPeers(){

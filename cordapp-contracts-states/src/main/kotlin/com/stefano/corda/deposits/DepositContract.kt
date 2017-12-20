@@ -6,7 +6,6 @@ import net.corda.core.contracts.requireSingleCommand
 import net.corda.core.contracts.requireThat
 import net.corda.core.transactions.LedgerTransaction
 import net.corda.finance.contracts.asset.Cash
-import net.corda.finance.flows.CashIssueAndPaymentFlow
 
 open class DepositContract : Contract {
     companion object {
@@ -52,10 +51,11 @@ open class DepositContract : Contract {
                     val depositOutputState = depositOutputStates.first()
                     val depositInputState = depositInputStates.first()
                     val cashOutput = cashOutputStates.first()
-                    "the landlord on input and output state must be the same" using (depositOutputState.landlord == depositInputState.landlord)
-                    "the tenant on input and output state must be the same" using (depositOutputState.tenant == depositInputState.tenant)
-                    "the deposit amount must be the same on input and output" using (depositOutputState.depositAmount == depositInputState.depositAmount)
-                    "the cash amount sent must equal the deposited amount" using (depositOutputState.amountDeposited.quantity == cashOutput.amount.quantity)
+
+                    "only deposited amount can change on the deposit state" using
+                            depositInputState.isEqualToExcluding(depositOutputState, setOf(DepositState::amountDeposited))
+
+                    "the cash amount sent must equal the deposited amount" using (depositOutputState.amountDeposited?.quantity == cashOutput.amount.quantity)
                     "the cash amount must be sent to the deposit backing scheme" using (cashOutput.owner == depositOutputState.issuer)
                 }
             }
@@ -70,6 +70,7 @@ open class DepositContract : Contract {
         data class CoSign(val propertyId: String) : Commands
         data class Fund(val propertyId: String) : Commands
         data class Deduct(val propertyId: String) : Commands
+        data class RequestRefund(val propertyId: String) : Commands
         data class Refund(val propertyId: String) : Commands
     }
 }
