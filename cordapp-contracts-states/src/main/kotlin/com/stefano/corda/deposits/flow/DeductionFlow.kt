@@ -78,7 +78,7 @@ object DeductionFlow {
 
             require(landlord == ourIdentity) { "deduction of a deposit must be initiated by the landlord." }
 
-            val fundCommand = Command(
+            val deductCommand = Command(
                     DepositContract.Commands.Deduct(refAndState.state.data.propertyId),
                     listOf(landlord, tenant, depositIssuer).map { it.owningKey }
             )
@@ -92,8 +92,8 @@ object DeductionFlow {
             val txBuilder = TransactionBuilder(notary)
                     .addInputState(refAndState)
                     .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)
-                    .addCommand(fundCommand)
-                    .addAttachment(picture)
+                    .addCommand(deductCommand)
+//                    .addAttachment(picture)
 
             progressTracker.currentStep = VERIFYING_TRANSACTION
             txBuilder.verify(serviceHub)
@@ -101,12 +101,11 @@ object DeductionFlow {
             progressTracker.currentStep = SIGNING_TRANSACTION
             val partSignedTx = serviceHub.signInitialTransaction(txBuilder)
 
-            val landLordFlow = initiateFlow(landlord)
             val tenantFlow = initiateFlow(tenant)
             val issuerFlow = initiateFlow(depositIssuer)
 
             progressTracker.currentStep = GATHERING_SIGS
-            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(landLordFlow, issuerFlow, tenantFlow),
+            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(issuerFlow, tenantFlow),
                     GATHERING_SIGS.childProgressTracker()))
 
             // Stage 5.
