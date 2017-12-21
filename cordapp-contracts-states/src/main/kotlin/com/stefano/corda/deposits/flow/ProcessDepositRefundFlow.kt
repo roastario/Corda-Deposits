@@ -72,7 +72,7 @@ object ProcessDepositRefundFlow {
                     .addCommand(requestRefundCommand)
 
             val schemeFlow = initiateFlow(scheme)
-            val updatedTxBuilder = subFlow(RefundInstructionFlow.Initiator(copy, txBuilder1, schemeFlow))
+            val updatedTxBuilder = subFlow(RefundInstructionFlow.Initiator(copy, txBuilder1))
 
             progressTracker.currentStep = VERIFYING_TRANSACTION
             updatedTxBuilder.verify(serviceHub)
@@ -89,6 +89,21 @@ object ProcessDepositRefundFlow {
             return subFlow(FinalityFlow(fullySignedTx, FINALISING_TRANSACTION.childProgressTracker()))
         }
 
+    }
+
+    @InitiatingFlow
+    @InitiatedBy(Initiator::class)
+    class Responder(val counterpartySession: FlowSession) : FlowLogic<SignedTransaction>() {
+        @Suspendable
+        override fun call(): SignedTransaction {
+            val flow = object : SignTransactionFlow(counterpartySession) {
+                @Suspendable
+                override fun checkTransaction(stx: SignedTransaction) {
+                }
+            }
+            val stx = subFlow(flow)
+            return waitForLedgerCommit(stx.id)
+        }
     }
 
 

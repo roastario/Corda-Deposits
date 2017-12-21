@@ -28,4 +28,4 @@ data class DepositState(val depositAmount: Amount<Currency>,
 }
 
 
-data class Deduction(val deductionReason: String, val deductionAmount: Amount<Currency>);
+data class Deduction(val deductionReason: String, val deductionAmount: Amount<Currency>, val picture: SecureHash);

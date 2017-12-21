@@ -20,7 +20,16 @@ async function onload(){
     fileReader.readAsArrayBuffer(selectedFile);
   }
 
-  loadPeers().then(getDeposits);
+  loadPeers().then(function(){
+    let getDepositsLoopable = function(){
+        getDeposits();
+        setTimeout(getDepositsLoopable, 1000)
+    }
+
+    getDepositsLoopable();
+  });
+
+
 
 }
 
@@ -47,6 +56,15 @@ function setupDialogs(){
   $( function() {
     $( "#depositStatusDialog" ).dialog("close");
   });
+
+
+    $( function() {
+      $( "#deductionDialog" ).dialog();
+    } );
+
+    $( function() {
+      $( "#deductionDialog" ).dialog("close");
+    } );
 }
 
 async function loadPeers(){
@@ -267,6 +285,55 @@ function refundDeposit(depositId){
 }
 
 function beginDeduction(depositId){
+    let dialogHolder = document.getElementById('deductionDialog');
+    dialogHolder.depositId = depositId;
+
+        $( function() {
+          $( "#deductionDialog" ).dialog("open");
+        } );
+}
+
+function sendDeductionRequest(){
+
+        let dialogHolder = document.getElementById('deductionDialog');
+        let depositId = dialogHolder.depositId;
+
+        let deductionAmount = document.getElementById("deductionAmount").value;
+        let deductionReason = document.getElementById("deductionReason").value;
+        getImageBytes(document.getElementById('deductionImage')).then(function(imageBytes){
+          let deductionRequest = {
+              'depositId': depositId,
+              'deductionReason': deductionReason,
+              'deductionAmount': deductionAmount,
+              'picture': imageBytes,
+          }
+          return asyncPost(deductionRequest, '/api/depositOps/deduct', function(resolvedResponse){
+            $( function() {
+              $( "#depositStatusDialog" ).dialog("close");
+            } );
+            return resolvedResponse;
+          }, 10000);
+        }).then(function(){
+            $( function() {
+              $( "#deductionDialog" ).dialog("close");
+            } );
+        })
+}
+
+async function getImageBytes(imageInput){
+  return new Promise( (resolve, reject) => {
+    let imageFile = imageInput.files[0];
+    let fileReader = new FileReader();
+    fileReader.onerror = reject;
+    fileReader.onload = function(){
+      var arrayBuffer = this.result
+      resolve(Array.from(new Uint8Array(arrayBuffer)));
+    };
+
+    fileReader.readAsArrayBuffer(imageFile);
+  });
+
+
 }
 
 async function getInventoryBytes(){

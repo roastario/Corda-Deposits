@@ -1,6 +1,9 @@
 function onload(){
-    getBalance();
-    getDeposits();
+        getBalance();
+        getDeposits();
+        setTimeout(function(){
+            onload();
+        }, 1000);
 }
 
 function getBalance(){
@@ -16,19 +19,43 @@ function getBalance(){
 
 function getDeposits(){
   asyncGet('/api/tenantOps/mydeposits', JSON.parse).then(function(loadedDeposits){
-    let fundedDeposits = [];
-    let unFundedDeposits = [];
-    loadedDeposits.forEach(deposit => {
-      if (deposit.state.data.amountDeposited){
-        fundedDeposits.push(deposit.state.data)
-      }else{
-        unFundedDeposits.push(deposit.state.data)
-      }
-    });
-    return {funded: fundedDeposits, unfunded: unFundedDeposits}
+    let unfundedDeposits = [];
+    let activeDeposits = [];
+    let depositsAwaitingRefunding = [];
+    let closedDeposits = [];
+
+    loadedDeposits.forEach(stateAndRef => {
+        let deposit = stateAndRef.state.data;
+        if (!deposit.amountDeposited){
+            unfundedDeposits.push(stateAndRef);
+        }else if (!deposit.refundRequested){
+            activeDeposits.push(stateAndRef);
+        }else if (!deposit.refunded){
+            depositsAwaitingRefunding.push(stateAndRef);
+        }else{
+            closedDeposits.push(stateAndRef);
+        }
+    })
+    return {funded: activeDeposits, unfunded: unfundedDeposits, waitingForRefund: depositsAwaitingRefunding, closed: closedDeposits}
   }).then(splitDeposits => {
-      populateFundedDepositTable(splitDeposits.funded);
-      populateUnfundedDepositTable(splitDeposits.unfunded);
+        setTimeout(function(){
+            if (!_.isEqual(splitDeposits.funded, window.fundedDeposits)){
+                populateFundedDepositTable(splitDeposits.funded);
+                window.fundedDeposits = splitDeposits.funded;
+            }
+        }, 0);
+        setTimeout(function(){
+            if (!_.isEqual(splitDeposits.unfunded, window.unfundedDeposits)){
+                populateUnfundedDepositTable(splitDeposits.unfunded);
+                window.unfundedDeposits = splitDeposits.unfunded;
+            }
+        }, 0);
+        setTimeout(function(){
+            populateInactiveDeposits(splitDeposits.waitingForRefund, "waitingDeposits");
+        }, 0);
+        setTimeout(function(){
+            populateInactiveDeposits(splitDeposits.closed, "refundedDeposits");
+        }, 0);
   });
 }
 
@@ -56,12 +83,36 @@ function fundDeposit(uniqueId){
     })
 }
 
+function populateInactiveDeposits(loadedDeposits, tableId){
+
+      let table = document.getElementById(tableId);
+      table.innerHTML = "";
+
+      (loadedDeposits || []).forEach(function(depositState){
+        let loadedDeposit = depositState.state.data;
+        let row = document.createElement('tr');
+        let propertyIdCell = document.createElement('td');
+        let landlordCell = document.createElement('td');
+        let depositAmountCell = document.createElement('td');
+
+        propertyIdCell.innerHTML = loadedDeposit.propertyId;
+        landlordCell.innerHTML = loadedDeposit.landlord;
+        depositAmountCell.innerHTML = loadedDeposit.depositAmount;
+
+        row.appendChild(propertyIdCell);
+        row.appendChild(landlordCell);
+        row.appendChild(depositAmountCell);
+
+        table.appendChild(row);
+      })
+}
+
 function populateFundedDepositTable(loadedDeposits){
   let table = document.getElementById('fundedDepositTable');
   table.innerHTML = "";
 
   loadedDeposits.forEach(function(depositState){
-    let loadedDeposit = depositState;
+    let loadedDeposit = depositState.state.data;
     let row = document.createElement('tr');
     let propertyIdCell = document.createElement('td');
     let landlordCell = document.createElement('td');
@@ -106,7 +157,7 @@ function populateUnfundedDepositTable(loadedDeposits){
   table.innerHTML = "";
 
   loadedDeposits.forEach(function(depositState){
-    let loadedDeposit = depositState;
+    let loadedDeposit = depositState.state.data;
     let row = document.createElement('tr');
     let propertyIdCell = document.createElement('td');
     let landlordCell = document.createElement('td');

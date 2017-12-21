@@ -13,35 +13,60 @@
 <div>
 
     <table>
+
         <tr>
             <td>
-                I want to create a deposit of
-                <label for="amount">£</label>
+                Deposit Amount:
+            </td>
+            <td>
                 <input id="amount" type="number"/>
             </td>
+        </tr>
+        <tr>
             <td>
-                for tenant by <select id="tenantSelect"></select>
+                Tenant Identity:
             </td>
             <td>
-                for property id <input id="propertyId" type="text"/>
+                <select id="tenantSelect"></select>
             </td>
-
-            <td> backed by deposit scheme: <select id="schemeSelect"></select></td>
+        </tr>
+        <tr>
+            <td>
+                Property Name:
+            </td>
+            <td>
+                <input id="propertyId" type="text"/>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                Inventory Pdf:
+            </td>
+            <td>
+                <input type="file" id="inventoryInput"/>
+            </td>
         </tr>
 
         <tr>
             <td>
+                Deposit held by:
             </td>
             <td>
+                <select id="schemeSelect"></select>
             </td>
+        </tr>
+
+        <tr>
             <td>
-                with inventory: <input type="file" id="inventoryInput"/>
+
             </td>
             <td>
                 <button onclick="sendDepositRequest()">Create UNFUNDED deposit</button>
             </td>
         </tr>
+
     </table>
+
 </div>
 
 
@@ -63,14 +88,54 @@
 </div>
 
 
-
-
 <div id="pdfDialog">
-  <div id="pdfHolder"></div>
+    <div id="pdfHolder"></div>
 </div>
 
 <div id="depositStatusDialog">
     <span> Creating Deposit </span>
+</div>
+
+
+<div id="deductionDialog">
+    <h3> Creating Deduction </h3>
+    <table>
+
+        <tr>
+            <td>
+                Deduction Amount:
+            </td>
+            <td>
+                <input id="deductionAmount" type="number"/>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                Deduction Reason:
+            </td>
+            <td>
+                <input id="deductionReason" type="text"/>
+            </td>
+        </tr>
+        <tr>
+            <td>
+                Evidence Image Name:
+            </td>
+            <td>
+                <input type="file" id="deductionImage"/>
+            </td>
+        </tr>
+        <tr>
+            <td>
+            </td>
+            <td>
+                <button onclick="sendDeductionRequest()">Deduct</button>
+            </td>
+        </tr>
+
+    </table>
+
+
 </div>
 
 </body>

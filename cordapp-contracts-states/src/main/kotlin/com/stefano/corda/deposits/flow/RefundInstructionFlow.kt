@@ -16,8 +16,7 @@ object RefundInstructionFlow{
     @InitiatingFlow
     @StartableByRPC
     class Initiator(val proposedDeposit: DepositState,
-                    val partialTx: TransactionBuilder,
-                    val sessionToInstruct: FlowSession) : FlowLogic<TransactionBuilder>(){
+                    val partialTx: TransactionBuilder) : FlowLogic<TransactionBuilder>(){
 
         override val progressTracker = tracker()
 
@@ -41,10 +40,11 @@ object RefundInstructionFlow{
             progressTracker.currentStep = FINDING_STATE
             progressTracker.currentStep = UPDATING_STATE;
             progressTracker.currentStep = REQUESTING_CASH_MOVEMENT;
-            sessionToInstruct.send(partialTx);
-            sessionToInstruct.send(proposedDeposit);
+            val issuerChannel = initiateFlow(proposedDeposit.issuer)
+            issuerChannel.send(partialTx);
+            issuerChannel.send(proposedDeposit);
             progressTracker.currentStep = VERIFYING_CASH_MOVEMENT
-            return sessionToInstruct.receive(receiveType = TransactionBuilder::class.java).unwrap({it});
+            return issuerChannel.receive(receiveType = TransactionBuilder::class.java).unwrap({it});
         }
     }
 
@@ -79,7 +79,7 @@ object RefundInstructionFlow{
             val proposedTransaction = counterpartySession.receive<TransactionBuilder>().unwrap { it };
             val propopsedOutputState = counterpartySession.receive<DepositState>().unwrap { it };
             Cash.Companion.generateSpend(serviceHub, proposedTransaction, propopsedOutputState.depositAmount, propopsedOutputState.tenant)
-            counterpartySession.send(propopsedOutputState);
+            counterpartySession.send(proposedTransaction);
         }
     }
 

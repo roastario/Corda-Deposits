@@ -1,6 +1,7 @@
 package com.stefano.corda.landlord.api
 
 import com.stefano.corda.deposits.DepositState
+import com.stefano.corda.deposits.flow.DeductionFlow
 import com.stefano.corda.deposits.flow.DepositIssueFlow
 import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
 import com.stefano.corda.deposits.utils.getInventory
@@ -80,6 +81,21 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
 
     }
 
+    @POST
+    @Path("deduct")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    fun deduct(deductionRequest: DeductionRequest): Response{
+        val imageHash = uploadImage(deductionRequest.picture)
+        val flowHandle = rpcOps.startFlow(DeductionFlow::Initiator,
+                deductionRequest.depositId,
+                deductionRequest.deductionReason,
+                Amount(deductionRequest.deductionAmount, Currency.getInstance("GBP")),
+                imageHash);
+        val result = flowHandle.returnValue.getOrThrow();
+        return Response.status(Response.Status.OK).entity(result).build();
+    }
+
 
     fun uploadInventory(inventory: ByteArray): SecureHash {
         val inputStream = ByteArrayInputStream(inventory);
@@ -87,6 +103,24 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
         try {
             val zippedOutputStream = ZipOutputStream(outputStream);
             zippedOutputStream.putNextEntry(ZipEntry("inventory.pdf"));
+            inputStream.copyTo(zippedOutputStream);
+            zippedOutputStream.closeEntry();
+            zippedOutputStream.flush();
+            zippedOutputStream.close();
+            return rpcOps.uploadAttachment(ByteArrayInputStream(outputStream.toByteArray()));
+        } finally {
+            inputStream.close();
+            outputStream.close();
+        }
+    }
+
+
+    fun uploadImage(inventory: ByteArray): SecureHash {
+        val inputStream = ByteArrayInputStream(inventory);
+        val outputStream = ByteArrayOutputStream()
+        try {
+            val zippedOutputStream = ZipOutputStream(outputStream);
+            zippedOutputStream.putNextEntry(ZipEntry("image"));
             inputStream.copyTo(zippedOutputStream);
             zippedOutputStream.closeEntry();
             zippedOutputStream.flush();
@@ -141,4 +175,27 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
             return result
         }
     };
+
+
+    data class DeductionRequest(val depositId: UniqueIdentifier, val deductionReason: String, val deductionAmount: Long, val picture: ByteArray) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as DeductionRequest
+
+            if (deductionReason != other.deductionReason) return false
+            if (deductionAmount != other.deductionAmount) return false
+            if (!Arrays.equals(picture, other.picture)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = deductionReason.hashCode()
+            result = 31 * result + deductionAmount.hashCode()
+            result = 31 * result + Arrays.hashCode(picture)
+            return result
+        }
+    }
 }
