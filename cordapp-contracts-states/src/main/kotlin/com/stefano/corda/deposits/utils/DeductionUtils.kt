@@ -9,15 +9,16 @@ import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
-private val inventoryFileName = "inventory.pdf"
+
+private val imageName = "image"
 
 
-fun CordaRPCOps.getInventory(hash: String): InputStream {
+fun CordaRPCOps.getImage(hash: String): InputStream {
     return getInventory(hash, this);
 }
 
-fun CordaRPCOps.saveInventory(data: ByteArray): SecureHash {
-    return uploadInventory(data, this);
+fun CordaRPCOps.saveImage(data: ByteArray): SecureHash {
+    return uploadImage(data, this);
 }
 
 private fun getInventory(hash: String, rpcOps: CordaRPCOps): InputStream {
@@ -25,7 +26,7 @@ private fun getInventory(hash: String, rpcOps: CordaRPCOps): InputStream {
     val attachmentStream = ZipInputStream(attachment);
     var entry: ZipEntry? = attachmentStream.nextEntry;
     while (entry != null) {
-        if (entry.name == inventoryFileName) {
+        if (entry.name == imageName) {
             break;
         }
         entry = attachmentStream.nextEntry;
@@ -33,17 +34,17 @@ private fun getInventory(hash: String, rpcOps: CordaRPCOps): InputStream {
     return attachmentStream
 }
 
-fun uploadInventory(inventory: ByteArray, rpcOps: CordaRPCOps): SecureHash {
+fun uploadImage(inventory: ByteArray, rcpOps: CordaRPCOps): SecureHash {
     val inputStream = ByteArrayInputStream(inventory);
     val outputStream = ByteArrayOutputStream()
     try {
         val zippedOutputStream = ZipOutputStream(outputStream);
-        zippedOutputStream.putNextEntry(ZipEntry(inventoryFileName));
+        zippedOutputStream.putNextEntry(ZipEntry(imageName));
         inputStream.copyTo(zippedOutputStream);
         zippedOutputStream.closeEntry();
         zippedOutputStream.flush();
         zippedOutputStream.close();
-        return rpcOps.uploadAttachment(ByteArrayInputStream(outputStream.toByteArray()));
+        return rcpOps.uploadAttachment(ByteArrayInputStream(outputStream.toByteArray()));
     } finally {
         inputStream.close();
         outputStream.close();

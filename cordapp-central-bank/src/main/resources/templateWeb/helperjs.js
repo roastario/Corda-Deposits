@@ -1,5 +1,4 @@
-var HTTP_OK = 200;
-var HTTP_OK_CREATED = 201;
+
 
 async function doClick(){
     var amount = document.getElementById("amount").value;
@@ -35,7 +34,7 @@ async function sendTransferRequest(){
     'nameOfParty': selectedPeer.data.x500,
     'amount': xferAmount,
     'currency': xferCurrency
-  }
+  };
 
   let response = await asyncPost(request, '/api/bankOps/xfer', function(resolvedResponse){
     console.log(resolvedResponse);

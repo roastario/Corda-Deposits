@@ -65,7 +65,7 @@ object ProcessDepositRefundFlow {
 
             progressTracker.currentStep = UPDATING_STATE;
 
-            val copy = refAndState.state.data.copy(refunded = Instant.now())
+            val copy = refAndState.state.data.copy(refundedAt = Instant.now())
             val txBuilder1 = TransactionBuilder(notary)
                     .addInputState(refAndState)
                     .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)

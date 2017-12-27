@@ -15,7 +15,7 @@ import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 import java.util.*
 
-object DeductionFlow {
+object LandlordSuggestDeductionFlow {
 
     fun addDeduction(list1: List<Deduction>, item: Deduction): List<Deduction>{
 
@@ -79,7 +79,7 @@ object DeductionFlow {
             require(landlord == ourIdentity) { "deduction of a deposit must be initiated by the landlord." }
 
             val deductCommand = Command(
-                    DepositContract.Commands.Deduct(refAndState.state.data.propertyId),
+                    DepositContract.Commands.LandlordDeduct(refAndState.state.data.propertyId),
                     listOf(landlord, tenant, depositIssuer).map { it.owningKey }
             )
 
@@ -87,13 +87,15 @@ object DeductionFlow {
 
             val deduction = Deduction(deductionReason, deductionAmount, picture);
 
-            val copy = refAndState.state.data.copy(deductions = if (refAndState.state.data.deductions == null) listOf(deduction) else addDeduction(refAndState.state.data.deductions as List<Deduction> ,(deduction)))
+            val copy = refAndState.state.data.copy(landlordDeductions =
+            if (refAndState.state.data.landlordDeductions == null) listOf(deduction)
+            else addDeduction(refAndState.state.data.landlordDeductions as List<Deduction> ,(deduction)))
 
             val txBuilder = TransactionBuilder(notary)
                     .addInputState(refAndState)
                     .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)
                     .addCommand(deductCommand)
-//                    .addAttachment(picture)
+                    .addAttachment(picture)
 
             progressTracker.currentStep = VERIFYING_TRANSACTION
             txBuilder.verify(serviceHub)

@@ -1,9 +1,11 @@
 package com.stefano.corda.landlord.api
 
+import com.stefano.corda.deposits.Deduction
 import com.stefano.corda.deposits.DepositState
 import com.stefano.corda.deposits.flow.FundDepositFlow
 import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
 import com.stefano.corda.deposits.flow.RequestDepositRefundFlow
+import com.stefano.corda.deposits.flow.TenantSuggestAcceptDeductionFlow
 import com.stefano.corda.deposits.utils.getInventory
 import net.corda.core.contracts.FungibleAsset
 import net.corda.core.contracts.StateAndRef
@@ -94,5 +96,19 @@ class TenantApi(val rpcOps: CordaRPCOps) {
         val result = flowHandle.returnValue.getOrThrow();
         return Response.status(Response.Status.OK).entity(result).build();
     }
+
+
+    @POST
+    @Path("deductions")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_JSON)
+    fun deductions(deductions: Deductions): Response {
+        val flowHandle = rpcOps.startFlow(TenantSuggestAcceptDeductionFlow::Initiator, deductions.forDeposit, deductions.accepted, deductions.contested);
+        val result = flowHandle.returnValue.getOrThrow();
+        return Response.status(Response.Status.OK).entity(result).build();
+    }
+
+
+    data class Deductions(val forDeposit: UniqueIdentifier, val accepted: List<Deduction>, val contested: List<Deduction>)
 
 }

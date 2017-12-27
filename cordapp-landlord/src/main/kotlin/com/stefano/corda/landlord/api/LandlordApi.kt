@@ -1,10 +1,13 @@
 package com.stefano.corda.landlord.api
 
 import com.stefano.corda.deposits.DepositState
-import com.stefano.corda.deposits.flow.DeductionFlow
+import com.stefano.corda.deposits.flow.LandlordSuggestDeductionFlow
 import com.stefano.corda.deposits.flow.DepositIssueFlow
 import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
+import com.stefano.corda.deposits.utils.getImage
 import com.stefano.corda.deposits.utils.getInventory
+import com.stefano.corda.deposits.utils.saveImage
+import com.stefano.corda.deposits.utils.saveInventory
 import net.corda.core.contracts.Amount
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.crypto.SecureHash
@@ -51,18 +54,12 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
         val scheme = rpcOps.wellKnownPartyFromX500Name(request.schemeX500Name) ?: throw IllegalArgumentException("Unknown scheme.")
         val tenant = rpcOps.wellKnownPartyFromX500Name(request.tenantX500Name) ?: throw IllegalArgumentException("Unknown tenant.")
         val landlord = rpcOps.nodeInfo().legalIdentities.first();
-        val inventoryHash = uploadInventory(request.inventory);
+        val inventoryHash = rpcOps.saveInventory(request.inventory);
         val depositState = DepositState(Amount(request.amount.toLong() * 100, Currency.getInstance("GBP")),
-                null,
-                null,
-                null,
-                null,
                 landlord,
                 tenant,
                 scheme,
                 request.propertyId,
-                null,
-                null,
                 inventoryHash
         )
         val flowHandle = rpcOps.startFlow(DepositIssueFlow::Initiator, depositState);
@@ -86,8 +83,8 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     fun deduct(deductionRequest: DeductionRequest): Response{
-        val imageHash = uploadImage(deductionRequest.picture)
-        val flowHandle = rpcOps.startFlow(DeductionFlow::Initiator,
+        val imageHash = rpcOps.saveImage(deductionRequest.picture);
+        val flowHandle = rpcOps.startFlow(LandlordSuggestDeductionFlow::Initiator,
                 deductionRequest.depositId,
                 deductionRequest.deductionReason,
                 Amount(deductionRequest.deductionAmount, Currency.getInstance("GBP")),
@@ -96,42 +93,12 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
         return Response.status(Response.Status.OK).entity(result).build();
     }
 
-
-    fun uploadInventory(inventory: ByteArray): SecureHash {
-        val inputStream = ByteArrayInputStream(inventory);
-        val outputStream = ByteArrayOutputStream()
-        try {
-            val zippedOutputStream = ZipOutputStream(outputStream);
-            zippedOutputStream.putNextEntry(ZipEntry("inventory.pdf"));
-            inputStream.copyTo(zippedOutputStream);
-            zippedOutputStream.closeEntry();
-            zippedOutputStream.flush();
-            zippedOutputStream.close();
-            return rpcOps.uploadAttachment(ByteArrayInputStream(outputStream.toByteArray()));
-        } finally {
-            inputStream.close();
-            outputStream.close();
-        }
+    @GET
+    @Path("deductionImage")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    fun getImage(@QueryParam("imageId") attachmentId: String):Response {
+        return Response.ok(rpcOps.getImage(attachmentId)).build();
     }
-
-
-    fun uploadImage(inventory: ByteArray): SecureHash {
-        val inputStream = ByteArrayInputStream(inventory);
-        val outputStream = ByteArrayOutputStream()
-        try {
-            val zippedOutputStream = ZipOutputStream(outputStream);
-            zippedOutputStream.putNextEntry(ZipEntry("image"));
-            inputStream.copyTo(zippedOutputStream);
-            zippedOutputStream.closeEntry();
-            zippedOutputStream.flush();
-            zippedOutputStream.close();
-            return rpcOps.uploadAttachment(ByteArrayInputStream(outputStream.toByteArray()));
-        } finally {
-            inputStream.close();
-            outputStream.close();
-        }
-    }
-
 
     @GET
     @Path("deposits")

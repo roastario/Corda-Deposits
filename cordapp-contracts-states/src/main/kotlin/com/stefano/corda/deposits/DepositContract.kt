@@ -59,8 +59,24 @@ open class DepositContract : Contract {
                     "the cash amount must be sent to the deposit backing scheme" using (cashOutput.owner == depositOutputState.issuer)
                 }
             }
+
+            is Commands.TenantDeduct -> {
+
+                requireThat{
+                    val inputDeposit = tx.inputsOfType<DepositState>().first()
+                    val outputDeposit = tx.outputsOfType<DepositState>().first()
+
+                    "states must be identical except for deduction fields" using inputDeposit.isEqualToExcluding(outputDeposit, setOf(DepositState::acceptedDeductions, DepositState::tenantDeductions))
+
+                    "all tenant supplied deductions must be included in original landlord deductions apart from amount" using
+                    outputDeposit.landlordDeductions!!.containsAllExcluding(outputDeposit.tenantDeductions!!, setOf(Deduction::deductionAmount))
+                }
+
+            }
         }
     }
+
+
 
     /**
      * This contract only implements one command, Create.
@@ -69,7 +85,8 @@ open class DepositContract : Contract {
         data class Create(val propertyId: String) : Commands
         data class CoSign(val propertyId: String) : Commands
         data class Fund(val propertyId: String) : Commands
-        data class Deduct(val propertyId: String) : Commands
+        data class LandlordDeduct(val propertyId: String) : Commands
+        data class TenantDeduct(val propertyId: String) : Commands
         data class RequestRefund(val propertyId: String) : Commands
         data class Refund(val propertyId: String) : Commands
     }

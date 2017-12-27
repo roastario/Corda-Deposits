@@ -4,6 +4,19 @@ import net.corda.core.contracts.requireThat
 import kotlin.reflect.KProperty
 import kotlin.reflect.full.memberProperties
 
+fun <T : Any> Collection<T>.containsAllExcluding(toCheck: Collection<T>, toExclude: Set<KProperty<Any?>>) : Boolean{
+    loopOverSmall@ for (t in toCheck) {
+        for (other in this) {
+            if (t.isEqualToExcluding(other, toExclude)){
+                break@loopOverSmall;
+            }
+        }
+        return false;
+    }
+
+    return true;
+}
+
 fun <T : Any> T.isEqualToExcluding(thing: T, toExclude: Set<KProperty<Any?>>): Boolean {
     return areEqualToExcluding(this, thing, toExclude);
 }
