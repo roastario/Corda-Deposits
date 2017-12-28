@@ -1,3 +1,5 @@
+"use strict";
+
 function onload() {
     getBalance();
     getDeposits();
@@ -33,7 +35,10 @@ function getDeposits() {
                 activeDeposits.push(stateAndRef);
             } else if (!deposit.refunded) {
                 depositsAwaitingRefunding.push(stateAndRef);
-            } else {
+            } else if (deposit.landlordDeductions) {
+                contestedDeposits.push(deposit);
+            }
+            else {
                 closedDeposits.push(stateAndRef);
             }
         });
@@ -100,13 +105,35 @@ function populateInactiveDeposits(loadedDeposits, tableId) {
         let landlordCell = document.createElement('td');
         let depositAmountCell = document.createElement('td');
 
+        let deductionTotalCell = document.createElement('td');
+        let deductionViewCell = document.createElement('td');
+
         propertyIdCell.innerHTML = loadedDeposit.propertyId;
         landlordCell.innerHTML = loadedDeposit.landlord;
         depositAmountCell.innerHTML = loadedDeposit.depositAmount;
 
+        if (loadedDeposit.landlordDeductions) {
+            let totalDeduction = 0;
+            loadedDeposit.landlordDeductions.forEach(deduction => {
+                totalDeduction = parseFloat(deduction.deductionAmount.match(NUMERIC_REGEXP)[0]) + totalDeduction;
+            });
+
+            const viewDeductionButton = document.createElement('button');
+
+            deductionTotalCell.innerHTML = '-[ ' + totalDeduction + " ]";
+            viewDeductionButton.innerHTML = 'view deductions';
+            deductionViewCell.appendChild(viewDeductionButton);
+
+            viewDeductionButton.onclick = function () {
+                viewAndContestDeductions(loadedDeposit);
+            }
+        }
+
         row.appendChild(propertyIdCell);
         row.appendChild(landlordCell);
         row.appendChild(depositAmountCell);
+        row.appendChild(deductionTotalCell);
+        row.appendChild(deductionViewCell);
 
         table.appendChild(row);
     })
@@ -133,7 +160,7 @@ function populateFundedDepositTable(loadedDeposits) {
         requestRefundCell.appendChild(requestRefundButton);
         requestRefundButton.onclick = function () {
             requestRefund(loadedDeposit.linearId);
-        }
+        };
 
         showInventoryButton.innerHTML = "Show Inventory";
         showInventoryCell.appendChild(showInventoryButton);
@@ -177,7 +204,7 @@ function populateUnfundedDepositTable(loadedDeposits) {
         fundDepositCell.appendChild(fundDepositButton);
         fundDepositButton.onclick = function () {
             fundDeposit(loadedDeposit.linearId);
-        }
+        };
         fundDepositButton.disabled = true;
 
         showInventoryButton.innerHTML = "Show Inventory";
@@ -215,15 +242,84 @@ async function requestRefund(uniqueId) {
     })
 }
 
-function buildDeductionDialog(depositToContest){
+function viewAndContestDeductions(deposit) {
 
-    const deductionDialog = document.getElementById('deductionDialog');
-    // depositToContest.
+    const deductions = deposit.landlordDeductions;
 
+    const deductionDialog = document.getElementById('deductionViewDialog');
+    deductionDialog.innerHTML = '';
 
+    deductions.forEach(function (deduction) {
+        const deductionAmount = deduction.deductionAmount;
+        const deductionReason = deduction.deductionReason;
+        const imageHash = deduction.picture;
+        const deductionRow = document.createElement('div');
+        deductionRow.classList.add('deductionRow');
+
+        deductionRow.dataset.deduction = deduction;
+        deductionRow.dataset.deposit = deposit;
+
+        const deductionTable = document.createElement('table');
+
+        const rowHolder = document.createElement('tr');
+        deductionTable.appendChild(rowHolder);
+
+        const deductionAmountCell = document.createElement('td');
+        deductionAmountCell.innerHTML = deductionReason;
+
+        const deductionReasonCell = document.createElement('td');
+        deductionReasonCell.innerHTML = deductionAmount;
+
+        const deductionImageCell = document.createElement('td');
+
+        deductionDialog.appendChild(deductionRow);
+
+        rowHolder.appendChild(deductionImageCell);
+        rowHolder.appendChild(deductionAmountCell);
+        rowHolder.appendChild(deductionReasonCell);
+
+        deductionRow.appendChild(deductionTable);
+
+        asyncDownload('/api/tenantOps/deductionImage?imageId=' + imageHash).then(function (binaryArrayBuffer) {
+            const base64Data = base64ArrayBuffer(binaryArrayBuffer);
+            const outputImg = document.createElement('img');
+            outputImg.style.width = '500px';
+            outputImg.style.height = '500px';
+            outputImg.src = 'data:image/png;base64,' + base64Data;
+            deductionImageCell.appendChild(outputImg);
+        });
+
+        const acceptTickBox = document.createElement("input");
+        acceptTickBox.setAttribute("type", "checkbox");
+        acceptTickBox.onchange = function (event) {
+            const isChecked = this.checked;
+            if (isChecked) {
+                if (!deposit.tenantDeductions) {
+                    deposit.tenantDeductions = [];
+                }
+                deposit.tenantDeductions.push(deduction);
+            } else {
+                deposit.tenantDeductions = _.filter(deposit.tenantDeductions, function (currentDeduction) {
+                    return !_.isEqual(currentDeduction, deduction);
+                });
+            }
+            console.log(deposit.tenantDeductions);
+        };
+
+        const deductionAcceptCell = document.createElement('td');
+        const acceptLabel = document.createElement('span');
+        acceptLabel.innerHTML = 'Accept Deduction';
+        deductionAcceptCell.appendChild(acceptLabel);
+        deductionAcceptCell.appendChild(acceptTickBox);
+        rowHolder.appendChild(deductionAcceptCell);
+    });
+
+    $(function () {
+        $("#deductionViewDialog").dialog("open");
+    });
 }
 
-async function contestDeductions(){
+async function contestDeductions() {
 
     const deductionDialog = document.getElementById('deductionDialog');
     const depositId = deductionDialog.depositId;
@@ -231,7 +327,11 @@ async function contestDeductions(){
     const acceptedDeductions = deductionDialog.accepted;
     const contestedDeductions = deductionDialog.contested;
 
-    return asyncPost({forDeposit: depositId, accepted: acceptedDeductions, contested: contestedDeductions}, "/api/tenantOps/contest", JSON.parse, 10000);
+    return asyncPost({
+        forDeposit: depositId,
+        accepted: acceptedDeductions,
+        contested: contestedDeductions
+    }, "/api/tenantOps/contest", JSON.parse, 10000);
 
 
 }
@@ -248,3 +348,7 @@ async function loadPeers() {
         populateSelectWithItems(document.getElementById('landlordSelect'), loadedPeers);
     })
 }
+
+
+
+

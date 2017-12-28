@@ -73,6 +73,14 @@ open class DepositContract : Contract {
                 }
 
             }
+
+            is Commands.Refund -> {
+                requireThat {
+                    val outputDeposit = tx.outputsOfType<DepositState>().first()
+                    "landlord deductions and tenant deductions must match" using
+                            (outputDeposit.landlordDeductions == outputDeposit.tenantDeductions)
+                }
+            }
         }
     }
 

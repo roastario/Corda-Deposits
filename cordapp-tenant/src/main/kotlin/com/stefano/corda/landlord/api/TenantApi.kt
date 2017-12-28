@@ -6,6 +6,7 @@ import com.stefano.corda.deposits.flow.FundDepositFlow
 import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
 import com.stefano.corda.deposits.flow.RequestDepositRefundFlow
 import com.stefano.corda.deposits.flow.TenantSuggestAcceptDeductionFlow
+import com.stefano.corda.deposits.utils.getImage
 import com.stefano.corda.deposits.utils.getInventory
 import net.corda.core.contracts.FungibleAsset
 import net.corda.core.contracts.StateAndRef
@@ -108,6 +109,12 @@ class TenantApi(val rpcOps: CordaRPCOps) {
         return Response.status(Response.Status.OK).entity(result).build();
     }
 
+    @GET
+    @Path("deductionImage")
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    fun getImage(@QueryParam("imageId") attachmentId: String):Response {
+        return Response.ok(rpcOps.getImage(attachmentId)).build();
+    }
 
     data class Deductions(val forDeposit: UniqueIdentifier, val accepted: List<Deduction>, val contested: List<Deduction>)
 

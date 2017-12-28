@@ -87,7 +87,7 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
         val flowHandle = rpcOps.startFlow(LandlordSuggestDeductionFlow::Initiator,
                 deductionRequest.depositId,
                 deductionRequest.deductionReason,
-                Amount(deductionRequest.deductionAmount, Currency.getInstance("GBP")),
+                Amount(deductionRequest.deductionAmount * 100, Currency.getInstance("GBP")),
                 imageHash);
         val result = flowHandle.returnValue.getOrThrow();
         return Response.status(Response.Status.OK).entity(result).build();

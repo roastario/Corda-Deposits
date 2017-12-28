@@ -58,7 +58,7 @@ object RequestDepositRefundFlow {
             require(tenant == ourIdentity) { "Refunding of a deposit must be initiated by the tenant." }
 
             val requestRefundCommand = Command(
-                    DepositContract.Commands.Refund(refAndState.state.data.propertyId),
+                    DepositContract.Commands.RequestRefund(refAndState.state.data.propertyId),
                     listOf(landlord, tenant).map { it.owningKey }
             )
             progressTracker.currentStep = UPDATING_STATE;

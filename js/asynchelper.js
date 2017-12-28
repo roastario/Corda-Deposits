@@ -1,5 +1,6 @@
 const HTTP_OK = 200;
 const HTTP_OK_CREATED = 201;
+const NUMERIC_REGEXP = /[-]{0,1}[\d.]*[\d]+/g;
 
 async function asyncGet(url, responseTransform, timeout) {
     return asyncDo("GET", null, url, responseTransform, timeout)

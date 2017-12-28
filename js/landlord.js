@@ -49,14 +49,16 @@ function viewLandlordOnlyDeductions(deposit){
         const deductionImageCell = document.createElement('td');
 
         deductionDialog.appendChild(deductionRow);
+        deductionTable.appendChild(deductionImageCell);
         deductionTable.appendChild(deductionAmountCell);
         deductionTable.appendChild(deductionReasonCell);
-        deductionTable.appendChild(deductionImageCell);
 
         deductionRow.appendChild(deductionTable);
         asyncDownload('/api/depositOps/deductionImage?imageId='+imageHash).then(function(binaryArrayBuffer){
             const base64Data = base64ArrayBuffer(binaryArrayBuffer);
             const outputImg = document.createElement('img');
+            outputImg.style.width = '500px';
+            outputImg.style.height = '500px';
             outputImg.src = 'data:image/png;base64,'+base64Data;
             deductionImageCell.appendChild(outputImg);
         });
@@ -65,15 +67,20 @@ function viewLandlordOnlyDeductions(deposit){
     $(function () {
         $("#deductionViewDialog").dialog("open");
     });
-
-
-
 }
 
 function setupDialogs() {
 
     $(function () {
-        $("#deductionViewDialog").dialog();
+        $("#deductionViewDialog").dialog({
+            autoOpen: true,
+            modal: true,
+            width: 'auto',
+            closeOnEscape: false,
+            draggable: true,
+            resizable: true,
+            height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0)
+        });
     });
     $(function () {
         $("#deductionViewDialog").dialog("close");

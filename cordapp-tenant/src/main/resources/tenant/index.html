@@ -52,8 +52,8 @@
 </div>
 
 
-<div id="deductionDialog">
-    <div id="deductionHolder"></div>
+<div id="deductionViewDialog">
+
 </div>
 
 </body>
@@ -75,6 +75,21 @@
     $( function() {
       $( "#dialog" ).dialog("close");
     } );
+
+    $(function () {
+        $("#deductionViewDialog").dialog({
+            autoOpen: true,
+            modal: true,
+            closeOnEscape: false,
+            draggable: true,
+            resizable: true,
+            height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0),
+            width: Math.max(document.documentElement.clientWidth, window.innerWidth || 0)
+        });
+    });
+    $(function () {
+        $("#deductionViewDialog").dialog("close");
+    });
 
 </script>
 </html>
