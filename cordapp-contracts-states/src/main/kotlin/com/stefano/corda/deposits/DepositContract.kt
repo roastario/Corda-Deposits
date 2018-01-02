@@ -60,25 +60,42 @@ open class DepositContract : Contract {
                 }
             }
 
-            is Commands.TenantDeduct -> {
-
-                requireThat{
-                    val inputDeposit = tx.inputsOfType<DepositState>().first()
-                    val outputDeposit = tx.outputsOfType<DepositState>().first()
-
-                    "states must be identical except for deduction fields" using inputDeposit.isEqualToExcluding(outputDeposit, setOf(DepositState::acceptedDeductions, DepositState::tenantDeductions))
-
-                    "all tenant supplied deductions must be included in original landlord deductions apart from amount" using
-                    outputDeposit.landlordDeductions!!.containsAllExcluding(outputDeposit.tenantDeductions!!, setOf(Deduction::deductionAmount))
-                }
-
-            }
-
             is Commands.Refund -> {
                 requireThat {
                     val outputDeposit = tx.outputsOfType<DepositState>().first()
-                    "landlord deductions and tenant deductions must match" using
-                            (outputDeposit.landlordDeductions == outputDeposit.tenantDeductions)
+                    "there can be no landlord deductions or landlord deductions and tenant deductions must match" using
+                            (outputDeposit.landlordDeductions == null || outputDeposit.landlordDeductions.isEmpty() ||outputDeposit.landlordDeductions == outputDeposit.tenantDeductions)
+                }
+            }
+
+
+            is Commands.SendBackToTenant -> {
+                requireThat {
+                    val outputDeposit = tx.outputsOfType<DepositState>().first()
+                    "there must be landlord deductions" using
+                            (outputDeposit.landlordDeductions != null && !outputDeposit.landlordDeductions.isEmpty())
+
+                    val inputDeposit = tx.inputsOfType<DepositState>().first()
+                    "this deposit must not be refunded or already sent to tenant" using
+                            (inputDeposit.refundedAt == null && inputDeposit.sentBackToTenantAt == null)
+
+                    "output state must have a sent to tenant time " using
+                            (outputDeposit.sentBackToTenantAt != null)
+                }
+            }
+
+            is Commands.SendBackToLandlord -> {
+                requireThat {
+                    val outputDeposit = tx.outputsOfType<DepositState>().first()
+                    "there must be tenant deductions" using
+                            (outputDeposit.tenantDeductions != null && !outputDeposit.tenantDeductions.isEmpty())
+
+                    val inputDeposit = tx.inputsOfType<DepositState>().first()
+                    "this deposit must not be refunded or already sent to tenant" using
+                            (inputDeposit.refundedAt == null && inputDeposit.sentBackToLandlordAt == null)
+
+                    "output state must have a sent to landlord time " using
+                            (outputDeposit.sentBackToLandlordAt != null)
                 }
             }
         }
@@ -96,6 +113,8 @@ open class DepositContract : Contract {
         data class LandlordDeduct(val propertyId: String) : Commands
         data class TenantDeduct(val propertyId: String) : Commands
         data class RequestRefund(val propertyId: String) : Commands
+        data class SendBackToTenant(val propertyId: String) : Commands
+        data class SendBackToLandlord(val propertyId: String) : Commands
         data class Refund(val propertyId: String) : Commands
     }
 }

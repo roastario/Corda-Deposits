@@ -8,8 +8,6 @@ import net.corda.core.identity.AbstractParty
 import net.corda.core.identity.Party
 import java.time.Instant
 import java.util.*
-import java.util.concurrent.ExecutionException
-import kotlin.reflect.KProperty
 
 data class DepositState(val depositAmount: Amount<Currency>,
 
@@ -24,14 +22,18 @@ data class DepositState(val depositAmount: Amount<Currency>,
                         val amountPaidToTenant: Amount<Currency>? = null,
                         val landlordDeductions: List<Deduction>? = null,
                         val tenantDeductions: List<Deduction>? = null,
-                        val acceptedDeductions: List<Deduction>? = null,
-                        val bounces: Int = 0,
+                        val contestedDeductions: List<Deduction>? = null,
                         val refundRequestedAt: Instant? = null,
                         val refundedAt: Instant? = null,
-
+                        val sentBackToTenantAt: Instant? = null,
+                        val sentBackToLandlordAt: Instant? = null,
+                        val sentToArbiter: Instant? = null,
                         override val linearId: UniqueIdentifier = UniqueIdentifier(propertyId)) : LinearState {
     override val participants: List<AbstractParty> get() = listOf(tenant, landlord, issuer);
 }
 
 
-data class Deduction(val deductionReason: String, val deductionAmount: Amount<Currency>, val picture: SecureHash);
+data class Deduction(val deductionReason: String,
+                     val deductionAmount: Amount<Currency>,
+                     val picture: SecureHash,
+                     val deductionId: UniqueIdentifier = UniqueIdentifier(deductionReason + deductionAmount.toString()));

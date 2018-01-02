@@ -9,14 +9,13 @@ import net.corda.core.utilities.unwrap
 import net.corda.finance.contracts.asset.Cash
 
 
-
-object RefundInstructionFlow{
+object RefundInstructionFlow {
 
 
     @InitiatingFlow
     @StartableByRPC
     class Initiator(val proposedDeposit: DepositState,
-                    val partialTx: TransactionBuilder) : FlowLogic<TransactionBuilder>(){
+                    val partialTx: TransactionBuilder) : FlowLogic<TransactionBuilder>() {
 
         override val progressTracker = tracker()
 
@@ -44,7 +43,7 @@ object RefundInstructionFlow{
             issuerChannel.send(partialTx);
             issuerChannel.send(proposedDeposit);
             progressTracker.currentStep = VERIFYING_CASH_MOVEMENT
-            return issuerChannel.receive(receiveType = TransactionBuilder::class.java).unwrap({it});
+            return issuerChannel.receive(receiveType = TransactionBuilder::class.java).unwrap({ it });
         }
     }
 
@@ -55,31 +54,36 @@ object RefundInstructionFlow{
         override val progressTracker: ProgressTracker = tracker()
 
         companion object {
-            object SET_UP : ProgressTracker.Step("Initialising flow.")
-            object RECEIVING_INPUT_OPTION : ProgressTracker.Step("We receive the input option from the counterparty.")
-            object QUERYING_THE_ORACLE : ProgressTracker.Step("Querying oracle for the current spot price and volatility.")
-            object BUILDING_THE_TX : ProgressTracker.Step("Building transaction.")
-            object ADDING_CASH_PAYMENT : ProgressTracker.Step("Adding the cash to cover the premium.")
-            object VERIFYING_THE_TX : ProgressTracker.Step("Verifying transaction.")
-            object WE_SIGN : ProgressTracker.Step("signing transaction.")
-            object ORACLE_SIGNS : ProgressTracker.Step("Requesting oracle signature.")
-            object OTHERS_SIGN : ProgressTracker.Step("Requesting old owner's signature.") {
-                override fun childProgressTracker() = CollectSignaturesFlow.tracker()
-            }
-            object FINALISING : ProgressTracker.Step("Finalising transaction.") {
-                override fun childProgressTracker() = FinalityFlow.tracker()
-            }
+            object RECEIVING_TX : ProgressTracker.Step("Receiving transaction proposal")
+            object RECEIVING_REFUND_INFO : ProgressTracker.Step("Receiving refund data")
+            object ADDING_TENANT_CASH_PAYMENT : ProgressTracker.Step("Moving cash to tenant")
+            object ADDING_LANDLORD_CASH_PAYMENT : ProgressTracker.Step("Moving cash to landlord")
+            object SENDING_TX : ProgressTracker.Step("Sending completed transaction proposal")
+            object DONE : ProgressTracker.Step("Finished")
 
-            fun tracker() = ProgressTracker(SET_UP, RECEIVING_INPUT_OPTION, QUERYING_THE_ORACLE, BUILDING_THE_TX,
-                    ADDING_CASH_PAYMENT, VERIFYING_THE_TX, WE_SIGN, ORACLE_SIGNS, OTHERS_SIGN, FINALISING)
+            fun tracker() = ProgressTracker(
+                    RECEIVING_TX,
+                    RECEIVING_REFUND_INFO,
+
+                    ADDING_TENANT_CASH_PAYMENT,
+                    ADDING_LANDLORD_CASH_PAYMENT,
+
+                    SENDING_TX,
+                    DONE
+            )
         }
 
         @Suspendable
         override fun call() {
+            progressTracker.currentStep = RECEIVING_TX;
             val proposedTransaction = counterpartySession.receive<TransactionBuilder>().unwrap { it };
+            progressTracker.currentStep = RECEIVING_REFUND_INFO
             val propopsedOutputState = counterpartySession.receive<DepositState>().unwrap { it };
+            progressTracker.currentStep = ADDING_TENANT_CASH_PAYMENT
             Cash.Companion.generateSpend(serviceHub, proposedTransaction, propopsedOutputState.depositAmount, propopsedOutputState.tenant)
+            progressTracker.currentStep = SENDING_TX
             counterpartySession.send(proposedTransaction);
+            progressTracker.currentStep = DONE;
         }
     }
 

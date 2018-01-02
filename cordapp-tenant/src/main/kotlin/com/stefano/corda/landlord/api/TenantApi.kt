@@ -2,10 +2,8 @@ package com.stefano.corda.landlord.api
 
 import com.stefano.corda.deposits.Deduction
 import com.stefano.corda.deposits.DepositState
-import com.stefano.corda.deposits.flow.FundDepositFlow
-import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
-import com.stefano.corda.deposits.flow.RequestDepositRefundFlow
-import com.stefano.corda.deposits.flow.TenantSuggestAcceptDeductionFlow
+import com.stefano.corda.deposits.flow.*
+import com.stefano.corda.deposits.flow.FundDepositFlow.getStateAndRefByLinearId
 import com.stefano.corda.deposits.utils.getImage
 import com.stefano.corda.deposits.utils.getInventory
 import net.corda.core.contracts.FungibleAsset
@@ -16,6 +14,7 @@ import net.corda.core.messaging.CordaRPCOps
 import net.corda.core.messaging.startFlow
 import net.corda.core.messaging.vaultQueryBy
 import net.corda.core.node.services.Vault
+import net.corda.core.node.services.vault.ColumnPredicate
 import net.corda.core.node.services.vault.QueryCriteria
 import net.corda.core.node.services.vault.Sort
 import net.corda.core.node.services.vault.builder
@@ -99,12 +98,22 @@ class TenantApi(val rpcOps: CordaRPCOps) {
     }
 
 
+//    @POST
+//    @Path("deductions")
+//    @Produces(MediaType.APPLICATION_JSON)
+//    @Consumes(MediaType.APPLICATION_JSON)
+//    fun deductions(deductions: Deductions): Response {
+//        val flowHandle = rpcOps.startFlow(TenantSuggestAcceptDeductionFlow::Initiator, deductions.forDeposit, deductions.accepted, deductions.contested);
+//        val result = flowHandle.returnValue.getOrThrow();
+//        return Response.status(Response.Status.OK).entity(result).build();
+//    }
+
     @POST
-    @Path("deductions")
-    @Produces(MediaType.APPLICATION_JSON)
+    @Path("handover")
     @Consumes(MediaType.APPLICATION_JSON)
-    fun deductions(deductions: Deductions): Response {
-        val flowHandle = rpcOps.startFlow(TenantSuggestAcceptDeductionFlow::Initiator, deductions.forDeposit, deductions.accepted, deductions.contested);
+    @Produces(MediaType.APPLICATION_JSON)
+    fun handover(deductions: Deductions): Response{
+        val flowHandle = rpcOps.startFlow(TenantSendDepositBackToTLandlordDeductionsFlow::Initiator, deductions.forDeposit, deductions.deductions);
         val result = flowHandle.returnValue.getOrThrow();
         return Response.status(Response.Status.OK).entity(result).build();
     }
@@ -116,6 +125,6 @@ class TenantApi(val rpcOps: CordaRPCOps) {
         return Response.ok(rpcOps.getImage(attachmentId)).build();
     }
 
-    data class Deductions(val forDeposit: UniqueIdentifier, val accepted: List<Deduction>, val contested: List<Deduction>)
+    data class Deductions(val forDeposit: UniqueIdentifier, val deductions: List<Deduction>)
 
 }

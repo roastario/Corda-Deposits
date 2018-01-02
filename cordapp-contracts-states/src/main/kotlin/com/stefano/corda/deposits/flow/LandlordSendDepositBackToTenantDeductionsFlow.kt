@@ -1,7 +1,6 @@
 package com.stefano.corda.deposits.flow
 
 import co.paralleluniverse.fibers.Suspendable
-import com.stefano.corda.deposits.Deduction
 import com.stefano.corda.deposits.DepositContract
 import com.stefano.corda.deposits.DepositState
 import com.stefano.corda.deposits.flow.FundDepositFlow.getStateAndRefByLinearId
@@ -11,30 +10,20 @@ import net.corda.core.flows.*
 import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
+import java.time.Instant
 
-object TenantSuggestAcceptDeductionFlow {
-
-    fun addDeduction(list1: List<Deduction>, item: Deduction): List<Deduction>{
-
-        val copy = list1.toMutableList();
-        copy += item;
-        return copy;
-
-    }
-
+object LandlordSendDepositBackToTenantDeductionsFlow {
 
     @InitiatingFlow
     @StartableByRPC
-    class Initiator(val depositId: UniqueIdentifier,
-                    val acceptedDeductions: List<Deduction>,
-                    val contestedDeductions: List<Deduction>) : FlowLogic<SignedTransaction>() {
-        /**
-         * The progress tracker checkpoints each stage of the flow and outputs the specified messages when each
-         * checkpoint is reached in the code. See the 'progressTracker.currentStep' expressions within the call() function.
-         */
+    class Initiator(val depositId: UniqueIdentifier) : FlowLogic<SignedTransaction>() {
+
+        override val progressTracker = tracker()
+
+
         companion object {
-            object FINDING_STATE : ProgressTracker.Step("Locating unfunded deposit to fund")
-            object APPLYING_DEDUCTION : ProgressTracker.Step("")
+            object FINDING_STATE : ProgressTracker.Step("Locating State")
+            object UPDATING_STATE : ProgressTracker.Step("Updating deposit handover time")
             object VERIFYING_TRANSACTION : ProgressTracker.Step("Verifying contract constraints.")
             object SIGNING_TRANSACTION : ProgressTracker.Step("Signing transaction with our private key.")
             object GATHERING_SIGS : ProgressTracker.Step("Gathering the counterparty's signature.") {
@@ -47,7 +36,7 @@ object TenantSuggestAcceptDeductionFlow {
 
             fun tracker() = ProgressTracker(
                     FINDING_STATE,
-                    APPLYING_DEDUCTION,
+                    UPDATING_STATE,
                     VERIFYING_TRANSACTION,
                     SIGNING_TRANSACTION,
                     GATHERING_SIGS,
@@ -55,14 +44,8 @@ object TenantSuggestAcceptDeductionFlow {
             )
         }
 
-        override val progressTracker = tracker()
-
-        /**
-         * The flow logic is encapsulated within the call() method.
-         */
         @Suspendable
         override fun call(): SignedTransaction {
-
             val notary = serviceHub.networkMapCache.notaryIdentities[0]
 
             progressTracker.currentStep = FINDING_STATE
@@ -70,42 +53,34 @@ object TenantSuggestAcceptDeductionFlow {
 
             val landlord = refAndState.state.data.landlord;
             val tenant = refAndState.state.data.tenant;
-            val depositIssuer = refAndState.state.data.issuer;
 
-            require(tenant == ourIdentity) { "deduction acceptance or modification must be initiated by tenant" }
+            require(landlord == ourIdentity) { "sending back of a deposit must be initiated by the landlord." }
 
-            val deductCommand = Command(
-                    DepositContract.Commands.TenantDeduct(refAndState.state.data.propertyId),
-                    listOf(landlord, tenant, depositIssuer).map { it.owningKey }
+            val requestRefundCommand = Command(
+                    DepositContract.Commands.SendBackToTenant(refAndState.state.data.propertyId),
+                    listOf(landlord, tenant).map { it.owningKey }
             )
 
-            progressTracker.currentStep = APPLYING_DEDUCTION
-
-            val copy = refAndState.state.data.copy(contestedDeductions = null, tenantDeductions = contestedDeductions)
-
+            progressTracker.currentStep = UPDATING_STATE;
+            val copy = refAndState.state.data.copy(sentBackToTenantAt = Instant.now())
             val txBuilder = TransactionBuilder(notary)
                     .addInputState(refAndState)
                     .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)
-                    .addCommand(deductCommand)
-
+                    .addCommand(requestRefundCommand)
             progressTracker.currentStep = VERIFYING_TRANSACTION
             txBuilder.verify(serviceHub)
-
             progressTracker.currentStep = SIGNING_TRANSACTION
             val partSignedTx = serviceHub.signInitialTransaction(txBuilder)
-
             val tenantFlow = initiateFlow(tenant)
-            val issuerFlow = initiateFlow(depositIssuer)
-
             progressTracker.currentStep = GATHERING_SIGS
-            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(issuerFlow, tenantFlow),
+            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(tenantFlow),
                     GATHERING_SIGS.childProgressTracker()))
-
-            // Stage 5.
             progressTracker.currentStep = FINALISING_TRANSACTION
             return subFlow(FinalityFlow(fullySignedTx, FINALISING_TRANSACTION.childProgressTracker()))
         }
+
     }
+
 
     @InitiatingFlow
     @InitiatedBy(Initiator::class)
@@ -115,11 +90,14 @@ object TenantSuggestAcceptDeductionFlow {
             val flow = object : SignTransactionFlow(counterpartySession) {
                 @Suspendable
                 override fun checkTransaction(stx: SignedTransaction) {
+                    //all checks delegated to contract
                 }
             }
             val stx = subFlow(flow)
-            return waitForLedgerCommit(stx.id)
+            return waitForLedgerCommit(stx.id);
         }
+
     }
+
 
 }

@@ -1,8 +1,9 @@
 package com.stefano.corda.landlord.api
 
 import com.stefano.corda.deposits.DepositState
-import com.stefano.corda.deposits.flow.LandlordSuggestDeductionFlow
 import com.stefano.corda.deposits.flow.DepositIssueFlow
+import com.stefano.corda.deposits.flow.LandlordSendDepositBackToTenantDeductionsFlow
+import com.stefano.corda.deposits.flow.LandlordSuggestDeductionFlow
 import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
 import com.stefano.corda.deposits.utils.getImage
 import com.stefano.corda.deposits.utils.getInventory
@@ -10,17 +11,12 @@ import com.stefano.corda.deposits.utils.saveImage
 import com.stefano.corda.deposits.utils.saveInventory
 import net.corda.core.contracts.Amount
 import net.corda.core.contracts.UniqueIdentifier
-import net.corda.core.crypto.SecureHash
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.messaging.CordaRPCOps
 import net.corda.core.messaging.startFlow
 import net.corda.core.messaging.vaultQueryBy
 import net.corda.core.utilities.getOrThrow
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.util.*
-import java.util.zip.ZipEntry
-import java.util.zip.ZipOutputStream
 import javax.ws.rs.*
 import javax.ws.rs.core.MediaType
 import javax.ws.rs.core.Response
@@ -75,7 +71,16 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
         val flowHandle = rpcOps.startFlow(ProcessDepositRefundFlow::Initiator, linearId);
         val result = flowHandle.returnValue.getOrThrow();
         return Response.status(Response.Status.OK).entity(result).build();
+    }
 
+    @POST
+    @Path("handover")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    fun handover(linearId: UniqueIdentifier): Response{
+        val flowHandle = rpcOps.startFlow(LandlordSendDepositBackToTenantDeductionsFlow::Initiator, linearId);
+        val result = flowHandle.returnValue.getOrThrow();
+        return Response.status(Response.Status.OK).entity(result).build();
     }
 
     @POST

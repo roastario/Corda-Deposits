@@ -26,14 +26,14 @@ async function onload() {
     });
 }
 
-function viewLandlordOnlyDeductions(deposit){
+function viewLandlordOnlyDeductions(deposit) {
 
     const deductions = deposit.landlordDeductions;
 
     const deductionDialog = document.getElementById('deductionViewDialog');
     deductionDialog.innerHTML = '';
 
-    deductions.forEach(function(deduction){
+    deductions.forEach(function (deduction) {
         const deductionAmount = deduction.deductionAmount;
         const deductionReason = deduction.deductionReason;
         const imageHash = deduction.picture;
@@ -54,12 +54,12 @@ function viewLandlordOnlyDeductions(deposit){
         deductionTable.appendChild(deductionReasonCell);
 
         deductionRow.appendChild(deductionTable);
-        asyncDownload('/api/depositOps/deductionImage?imageId='+imageHash).then(function(binaryArrayBuffer){
+        asyncDownload('/api/depositOps/deductionImage?imageId=' + imageHash).then(function (binaryArrayBuffer) {
             const base64Data = base64ArrayBuffer(binaryArrayBuffer);
             const outputImg = document.createElement('img');
             outputImg.style.width = '500px';
             outputImg.style.height = '500px';
-            outputImg.src = 'data:image/png;base64,'+base64Data;
+            outputImg.src = 'data:image/png;base64,' + base64Data;
             deductionImageCell.appendChild(outputImg);
         });
     });
@@ -192,6 +192,14 @@ async function getDeposits() {
 
 }
 
+function sendDepositToTenant(depositId) {
+    console.log("sending: " + JSON.stringify(depositId));
+    return asyncPost(depositId, '/api/depositOps/handover', function (resolvedResponse) {
+        getDeposits();
+        return resolvedResponse;
+    }, 10000);
+}
+
 function populateDepositsToRefund(deposits) {
 
     let holdingTable = document.getElementById("refundDeposits");
@@ -213,33 +221,41 @@ function populateDepositsToRefund(deposits) {
         inventoryButtonCell.appendChild(inventoryButton);
 
         let deductButtonCell = document.createElement('td');
-        let deductButton = document.createElement('button');
-        deductButton.onclick = function () {
-            beginDeduction(deposit.linearId);
-        };
-        deductButton.innerHTML = "Request Deduction";
-        deductButtonCell.appendChild(deductButton);
-
 
         let viewDeductionsButtonCell = document.createElement('td');
-
-        if (deposit.landlordDeductions){
-            const viewDeductionsButton = document.createElement('button');
-             viewDeductionsButton.innerHTML = "View Current Deductions";
-             viewDeductionsButton.onclick = function(){
-                 viewLandlordOnlyDeductions(deposit);
-             };
-             viewDeductionsButtonCell.append(viewDeductionsButton);
-        }
-
         let refundButtonCell = document.createElement('td');
-        let refundButton = document.createElement('button');
-        refundButton.onclick = () => {
-            refundDeposit(deposit.linearId);
-        };
-        refundButton.innerHTML = "Release Refund";
-        refundButtonCell.appendChild(refundButton);
 
+        if (!deposit.sentBackToTenantAt) {
+            let deductButton = document.createElement('button');
+            deductButton.onclick = function () {
+                beginDeduction(deposit.linearId);
+            };
+            deductButton.innerHTML = "Request Deduction";
+            deductButtonCell.appendChild(deductButton);
+            if (deposit.landlordDeductions) {
+                const viewDeductionsButton = document.createElement('button');
+                viewDeductionsButton.innerHTML = "View Current Deductions";
+                viewDeductionsButton.onclick = function () {
+                    viewLandlordOnlyDeductions(deposit);
+                };
+                const sendDeductionsButton = document.createElement('button');
+                sendDeductionsButton.innerHTML = "Send To Tenant";
+
+                sendDeductionsButton.onclick = function () {
+                    sendDepositToTenant(deposit.linearId);
+                };
+
+                viewDeductionsButtonCell.append(viewDeductionsButton);
+                viewDeductionsButtonCell.append(sendDeductionsButton);
+            } else {
+                let refundButton = document.createElement('button');
+                refundButton.onclick = () => {
+                    refundDeposit(deposit.linearId);
+                };
+                refundButton.innerHTML = "Release Refund";
+                refundButtonCell.appendChild(refundButton);
+            }
+        }
 
 
         propertyIdCell.innerHTML = deposit.propertyId;
@@ -253,7 +269,6 @@ function populateDepositsToRefund(deposits) {
         row.appendChild(inventoryButtonCell);
         row.appendChild(deductButtonCell);
         row.appendChild(viewDeductionsButtonCell);
-
 
 
         row.appendChild(refundButtonCell);

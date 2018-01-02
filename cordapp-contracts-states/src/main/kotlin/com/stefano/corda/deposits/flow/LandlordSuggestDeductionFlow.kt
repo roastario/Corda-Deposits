@@ -17,7 +17,7 @@ import java.util.*
 
 object LandlordSuggestDeductionFlow {
 
-    fun addDeduction(list1: List<Deduction>, item: Deduction): List<Deduction>{
+    fun addDeduction(list1: List<Deduction>, item: Deduction): List<Deduction> {
 
         val copy = list1.toMutableList();
         copy += item;
@@ -89,7 +89,7 @@ object LandlordSuggestDeductionFlow {
 
             val copy = refAndState.state.data.copy(landlordDeductions =
             if (refAndState.state.data.landlordDeductions == null) listOf(deduction)
-            else addDeduction(refAndState.state.data.landlordDeductions as List<Deduction> ,(deduction)))
+            else addDeduction(refAndState.state.data.landlordDeductions as List<Deduction>, deduction))
 
             val txBuilder = TransactionBuilder(notary)
                     .addInputState(refAndState)

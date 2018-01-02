@@ -1,11 +1,48 @@
 "use strict";
 
 function onload() {
+    setupDialogs();
+    const depositLoop = function () {
+        refresh();
+        setTimeout(function () {
+            depositLoop();
+        }, 1000);
+    };
+    depositLoop();
+}
+
+function refresh(){
     getBalance();
     getDeposits();
-    setTimeout(function () {
-        onload();
-    }, 1000);
+}
+
+function setupDialogs() {
+
+
+    $(function () {
+        $("#dialog").dialog();
+    });
+
+    $(function () {
+        $("#dialog").dialog("close");
+    });
+
+    $(function () {
+        $("#deductionViewDialog").dialog({
+            autoOpen: true,
+            modal: true,
+            closeOnEscape: false,
+            draggable: true,
+            resizable: true,
+            height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0) * 0.85,
+            width: Math.max(document.documentElement.clientWidth, window.innerWidth || 0),
+        });
+    });
+
+    $(function () {
+        $("#deductionViewDialog").dialog("close");
+    });
+
 }
 
 function getBalance() {
@@ -35,7 +72,7 @@ function getDeposits() {
                 activeDeposits.push(stateAndRef);
             } else if (!deposit.refunded) {
                 depositsAwaitingRefunding.push(stateAndRef);
-            } else if (deposit.landlordDeductions) {
+            } else if (deposit.sentBackToLandlordAt) {
                 contestedDeposits.push(deposit);
             }
             else {
@@ -67,6 +104,9 @@ function getDeposits() {
         setTimeout(function () {
             populateInactiveDeposits(splitDeposits.closed, "refundedDeposits");
         }, 0);
+        setTimeout(function () {
+            populateInactiveDeposits(splitDeposits.contested, "contestedDeposits");
+        }, 0);
     });
 }
 
@@ -87,7 +127,7 @@ function fundDeposit(uniqueId) {
         console.log("funded deposit: " + uniqueId);
         return true;
     }).then(function () {
-        onload();
+        refresh();
     }).catch(function (rejection) {
         console.log(rejection);
     })
@@ -117,13 +157,10 @@ function populateInactiveDeposits(loadedDeposits, tableId) {
             loadedDeposit.landlordDeductions.forEach(deduction => {
                 totalDeduction = parseFloat(deduction.deductionAmount.match(NUMERIC_REGEXP)[0]) + totalDeduction;
             });
-
             const viewDeductionButton = document.createElement('button');
-
             deductionTotalCell.innerHTML = '-[ ' + totalDeduction + " ]";
             viewDeductionButton.innerHTML = 'view deductions';
             deductionViewCell.appendChild(viewDeductionButton);
-
             viewDeductionButton.onclick = function () {
                 viewAndContestDeductions(loadedDeposit);
             }
@@ -236,16 +273,26 @@ async function requestRefund(uniqueId) {
         console.log("requested refund for deposit: " + (uniqueId));
         return true;
     }).then(function () {
-        onload();
+        refresh();
     }).catch(function (rejection) {
         console.log(rejection);
     })
 }
 
+function removeExistingDeduction(deposit, deduction) {
+    deposit.tenantDeductions = deposit.tenantDeductions ? deposit.tenantDeductions : [];
+    const filtered = _.filter(deposit.tenantDeductions, function (currentDeduction) {
+        return !_.isEqual(currentDeduction.deductionId.id, deduction.deductionId.id);
+    });
+    console.log(deposit.tenantDeductions);
+    console.log(filtered);
+    deposit.tenantDeductions = filtered;
+    return deposit.tenantDeductions;
+}
+
 function viewAndContestDeductions(deposit) {
 
     const deductions = deposit.landlordDeductions;
-
     const deductionDialog = document.getElementById('deductionViewDialog');
     deductionDialog.innerHTML = '';
 
@@ -289,64 +336,83 @@ function viewAndContestDeductions(deposit) {
             deductionImageCell.appendChild(outputImg);
         });
 
+        const alternateCostCell = document.createElement('td');
+        const alternateCostInput = document.createElement('input');
+        alternateCostInput.setAttribute('type', 'number');
+        alternateCostInput.disabled = false;
+
+        alternateCostInput.oninput = function (event) {
+            const value = parseFloat(this.value);
+            const tenantVersion = _.clone(deduction);
+            tenantVersion.deductionAmount = deduction.deductionAmount.replace(NUMERIC_REGEXP, value.toFixed(2));
+            deposit.tenantDeductions = removeExistingDeduction(deposit, deduction);
+            deposit.tenantDeductions.push(tenantVersion);
+            console.log(deposit.tenantDeductions);
+        };
+
+        const alternateCostLabel = document.createElement('span');
+        alternateCostLabel.innerHTML = 'Alternate Deduction Amount ';
+
+        alternateCostCell.appendChild(alternateCostLabel);
+        alternateCostCell.appendChild(alternateCostInput);
+
         const acceptTickBox = document.createElement("input");
         acceptTickBox.setAttribute("type", "checkbox");
         acceptTickBox.onchange = function (event) {
             const isChecked = this.checked;
+            deposit.tenantDeductions = removeExistingDeduction(deposit, deduction);
             if (isChecked) {
-                if (!deposit.tenantDeductions) {
-                    deposit.tenantDeductions = [];
-                }
+                alternateCostInput.value = "";
                 deposit.tenantDeductions.push(deduction);
+                alternateCostInput.disabled = true;
             } else {
-                deposit.tenantDeductions = _.filter(deposit.tenantDeductions, function (currentDeduction) {
-                    return !_.isEqual(currentDeduction, deduction);
-                });
+                alternateCostInput.disabled = false;
             }
             console.log(deposit.tenantDeductions);
         };
 
         const deductionAcceptCell = document.createElement('td');
         const acceptLabel = document.createElement('span');
-        acceptLabel.innerHTML = 'Accept Deduction';
+        acceptLabel.innerHTML = 'Accept Deduction ';
         deductionAcceptCell.appendChild(acceptLabel);
         deductionAcceptCell.appendChild(acceptTickBox);
+
         rowHolder.appendChild(deductionAcceptCell);
+        rowHolder.appendChild(alternateCostCell);
     });
 
     $(function () {
-        $("#deductionViewDialog").dialog("open");
+        const deductionViewDialog = $("#deductionViewDialog");
+        if (deposit.sentBackToTenantAt) {
+            deductionViewDialog.dialog("option", "buttons",
+                [
+                    {
+                        text: "Submit",
+                        icon: "ui-icon-heart",
+                        click: function () {
+                            sendDepositToLandlord(deposit).then(function (response) {
+                                console.log(response);
+                                $(this).dialog("close");
+                            })
+                        }
+                    }
+                ]
+            );
+        }
+        deductionViewDialog.dialog("open");
     });
 }
 
-async function contestDeductions() {
-
-    const deductionDialog = document.getElementById('deductionDialog');
-    const depositId = deductionDialog.depositId;
-
-    const acceptedDeductions = deductionDialog.accepted;
-    const contestedDeductions = deductionDialog.contested;
-
-    return asyncPost({
-        forDeposit: depositId,
-        accepted: acceptedDeductions,
-        contested: contestedDeductions
-    }, "/api/tenantOps/contest", JSON.parse, 10000);
-
-
-}
-
-async function loadPeers() {
-    return asyncGet('/api/depositOps/peers', function (json) {
-        let parsedPeers = JSON.parse(json);
-        return parsedPeers['peers'].filter(function (peer) {
-            let lowerCaseName = peer.toLowerCase();
-            return lowerCaseName.includes('landlord') || lowerCaseName.includes('tenant')
-        });
-    }).then(function (loadedPeers) {
-        populateSelectWithItems(document.getElementById('tenantSelect'), loadedPeers);
-        populateSelectWithItems(document.getElementById('landlordSelect'), loadedPeers);
-    })
+async function sendDepositToLandlord(deposit) {
+    console.log("sending: " + JSON.stringify(deposit));
+    const deductions = {
+        forDeposit: deposit.linearId,
+        deductions: deposit.tenantDeductions,
+    };
+    return asyncPost(deductions, '/api/tenantOps/handover', function (resolvedResponse) {
+        getDeposits();
+        return resolvedResponse;
+    }, 10000);
 }
 
 
