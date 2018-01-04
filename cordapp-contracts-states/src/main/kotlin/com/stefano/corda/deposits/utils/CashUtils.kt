@@ -3,16 +3,35 @@ package com.stefano.corda.deposits.utils
 import net.corda.core.contracts.*
 import net.corda.core.crypto.SecureHash
 import net.corda.core.identity.AbstractParty
+import net.corda.core.messaging.CordaRPCOps
+import net.corda.core.messaging.vaultQueryBy
 import net.corda.core.node.ServiceHub
+import net.corda.core.node.services.vault.QueryCriteria
+import net.corda.core.node.services.vault.Sort
+import net.corda.core.node.services.vault.builder
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.finance.contracts.asset.Cash
 import net.corda.finance.flows.CashException
-import java.security.PublicKey
+import net.corda.finance.schemas.CashSchemaV1
 import java.util.*
 
-// TODO I believe this should be the standard behaviour of Cash.generateSpend(), rather than appending a Cash.Commands.Move() without checks
-// TODO port this to Corda
-fun Cash.Companion.generateSpend(builder: TransactionBuilder, serviceHub: ServiceHub, amount: Amount<Currency>, to: AbstractParty, onlyFromParties: Set<AbstractParty> = emptySet()): Pair<TransactionBuilder, List<PublicKey>> {
+
+fun CordaRPCOps.getCash(): List<Any> {
+    val sum = builder {
+        CashSchemaV1.PersistentCashState::pennies.sum(
+                groupByColumns = listOf(CashSchemaV1.PersistentCashState::currency, CashSchemaV1.PersistentCashState::issuerRef),
+                orderBy = Sort.Direction.DESC)
+    }
+    val criteria = QueryCriteria.VaultCustomQueryCriteria(sum)
+    val sums = this.vaultQueryBy<FungibleAsset<*>>(criteria).otherResults
+    return sums;
+}
+
+fun Cash.Companion.generateSpendAvoidingDuplicateMoves(serviceHub: ServiceHub,
+                                                       builder: TransactionBuilder,
+                                                       amount: Amount<Currency>,
+                                                       to: AbstractParty,
+                                                       onlyFromParties: Set<AbstractParty> = emptySet()): TransactionBuilder{
 
     val tmpBuilder = TransactionBuilder(builder.notary!!)
     val (_, anonymisedSpendOwnerKeys) = try {
@@ -23,8 +42,9 @@ fun Cash.Companion.generateSpend(builder: TransactionBuilder, serviceHub: Servic
     val resultBuilder = TransactionBuilder(builder.notary!!)
     builder.copyTo(resultBuilder, serviceHub, filterCommands = { it.value !is Cash.Commands.Move })
     tmpBuilder.copyTo(resultBuilder, serviceHub, filterCommands = { it.value !is Cash.Commands.Move })
-    resultBuilder.addCommand(Cash.Commands.Move(), builder.commands().filter { it.value is Cash.Commands.Move }.flatMap { it.signers } + tmpBuilder.commands().filter { it.value is Cash.Commands.Move }.flatMap { it.signers })
-    return resultBuilder to anonymisedSpendOwnerKeys
+    resultBuilder.addCommand(Cash.Commands.Move(),
+            builder.commands().filter { it.value is Cash.Commands.Move }.flatMap { it.signers } + tmpBuilder.commands().filter { it.value is Cash.Commands.Move }.flatMap { it.signers })
+    return resultBuilder
 }
 
 // TODO remove after solving tmpBuilder need - or perhaps port this into Corda's TransactionBuilder
@@ -36,8 +56,6 @@ fun TransactionBuilder.copyTo(
         filterCommands: (command: Command<*>) -> Boolean = { true },
         filterAttachments: (attachment: SecureHash) -> Boolean = { true }
 ) {
-
-    // TODO perhaps we won't need this if we add this function to TransactionBuilder
     inputStates().map { serviceHub.toStateAndRef<ContractState>(it) }.filter(filterInputStates).forEach { other.addInputState(it) }
     outputStates().filter(filterOutputStates).map { other.addOutputState(it) }
     commands().filter(filterCommands).forEach { other.addCommand(it) }

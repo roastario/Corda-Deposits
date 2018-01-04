@@ -1,21 +1,20 @@
 package com.stefano.corda.landlord.api
 
 import com.stefano.corda.deposits.DepositState
-import com.stefano.corda.deposits.flow.DepositIssueFlow
-import com.stefano.corda.deposits.flow.LandlordSendDepositBackToTenantDeductionsFlow
-import com.stefano.corda.deposits.flow.LandlordSuggestDeductionFlow
-import com.stefano.corda.deposits.flow.ProcessDepositRefundFlow
-import com.stefano.corda.deposits.utils.getImage
-import com.stefano.corda.deposits.utils.getInventory
-import com.stefano.corda.deposits.utils.saveImage
-import com.stefano.corda.deposits.utils.saveInventory
+import com.stefano.corda.deposits.flow.*
+import com.stefano.corda.deposits.utils.*
 import net.corda.core.contracts.Amount
+import net.corda.core.contracts.FungibleAsset
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.identity.CordaX500Name
 import net.corda.core.messaging.CordaRPCOps
 import net.corda.core.messaging.startFlow
 import net.corda.core.messaging.vaultQueryBy
+import net.corda.core.node.services.vault.QueryCriteria
+import net.corda.core.node.services.vault.Sort
+import net.corda.core.node.services.vault.builder
 import net.corda.core.utilities.getOrThrow
+import net.corda.finance.schemas.CashSchemaV1
 import java.util.*
 import javax.ws.rs.*
 import javax.ws.rs.core.MediaType
@@ -23,7 +22,6 @@ import javax.ws.rs.core.Response
 
 @Path("depositOps")
 class LandlordApi(val rpcOps: CordaRPCOps) {
-
 
 
     @GET
@@ -67,7 +65,7 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @Path("refund")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    fun refund(linearId: UniqueIdentifier): Response{
+    fun refund(linearId: UniqueIdentifier): Response {
         val flowHandle = rpcOps.startFlow(ProcessDepositRefundFlow::Initiator, linearId);
         val result = flowHandle.returnValue.getOrThrow();
         return Response.status(Response.Status.OK).entity(result).build();
@@ -77,7 +75,7 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @Path("handover")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    fun handover(linearId: UniqueIdentifier): Response{
+    fun handover(linearId: UniqueIdentifier): Response {
         val flowHandle = rpcOps.startFlow(LandlordSendDepositBackToTenantDeductionsFlow::Initiator, linearId);
         val result = flowHandle.returnValue.getOrThrow();
         return Response.status(Response.Status.OK).entity(result).build();
@@ -87,7 +85,7 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @Path("deduct")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    fun deduct(deductionRequest: DeductionRequest): Response{
+    fun deduct(deductionRequest: DeductionRequest): Response {
         val imageHash = rpcOps.saveImage(deductionRequest.picture);
         val flowHandle = rpcOps.startFlow(LandlordSuggestDeductionFlow::Initiator,
                 deductionRequest.depositId,
@@ -101,7 +99,7 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @GET
     @Path("deductionImage")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
-    fun getImage(@QueryParam("imageId") attachmentId: String):Response {
+    fun getImage(@QueryParam("imageId") attachmentId: String): Response {
         return Response.ok(rpcOps.getImage(attachmentId)).build();
     }
 
@@ -114,8 +112,25 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @GET
     @Path("inventory")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
-    fun getInventory(@QueryParam("attachmentId") attachmentId: String):Response {
+    fun getInventory(@QueryParam("attachmentId") attachmentId: String): Response {
         return Response.ok(rpcOps.getInventory(attachmentId)).build();
+    }
+
+    @POST
+    @Path("acceptTenantDeductions")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    fun acceptTenantDeductions(depositId: UniqueIdentifier): Response {
+        val flowHandle = rpcOps.startFlow(AcceptTenantDeductionsFlow::Initiator, depositId);
+        flowHandle.returnValue.getOrThrow();
+        return refund(depositId);
+    }
+
+    @GET
+    @Path("balance")
+    @Produces(MediaType.APPLICATION_JSON)
+    fun getCash(): List<Any> {
+        return rpcOps.getCash();
     }
 
     data class DepositRequest(val schemeX500Name: CordaX500Name,

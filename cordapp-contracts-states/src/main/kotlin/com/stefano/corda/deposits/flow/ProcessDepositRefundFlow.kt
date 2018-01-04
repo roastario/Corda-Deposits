@@ -4,6 +4,7 @@ import co.paralleluniverse.fibers.Suspendable
 import com.stefano.corda.deposits.DepositContract
 import com.stefano.corda.deposits.DepositState
 import com.stefano.corda.deposits.flow.FundDepositFlow.getStateAndRefByLinearId
+import com.stefano.corda.deposits.utils.copyTo
 import net.corda.core.contracts.Command
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.flows.*
@@ -66,19 +67,24 @@ object ProcessDepositRefundFlow {
             progressTracker.currentStep = UPDATING_STATE;
 
             val copy = refAndState.state.data.copy(refundedAt = Instant.now())
-            val txBuilder1 = TransactionBuilder(notary)
+            val txBuilder = TransactionBuilder(notary)
                     .addInputState(refAndState)
                     .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)
                     .addCommand(requestRefundCommand)
 
             val schemeFlow = initiateFlow(scheme)
-            val updatedTxBuilder = subFlow(RefundInstructionFlow.Initiator(copy, txBuilder1))
+            val returnedTxBuilder = subFlow(RefundInstructionFlow.Initiator(copy, txBuilder))
+            returnedTxBuilder.copyTo(txBuilder, serviceHub,
+                    { !txBuilder.inputStates().contains(it.ref) },
+                    { !txBuilder.outputStates().contains(it) },
+                    { !txBuilder.commands().contains(it) }
+            );
 
             progressTracker.currentStep = VERIFYING_TRANSACTION
-            updatedTxBuilder.verify(serviceHub)
+            txBuilder.verify(serviceHub)
 
             progressTracker.currentStep = SIGNING_TRANSACTION
-            val partSignedTx = serviceHub.signInitialTransaction(updatedTxBuilder)
+            val partSignedTx = serviceHub.signInitialTransaction(txBuilder)
             val tenantFlow = initiateFlow(tenant)
 
             progressTracker.currentStep = GATHERING_SIGS

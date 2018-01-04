@@ -108,7 +108,7 @@ open class DepositContract : Contract {
      */
     interface Commands : CommandData {
         data class Create(val propertyId: String) : Commands
-        data class CoSign(val propertyId: String) : Commands
+        data class AcceptTenantDeductions(val propertyId: String) : Commands
         data class Fund(val propertyId: String) : Commands
         data class LandlordDeduct(val propertyId: String) : Commands
         data class TenantDeduct(val propertyId: String) : Commands

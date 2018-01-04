@@ -44,7 +44,6 @@ class BankApi(val rpcOps: CordaRPCOps) {
     @Path("me")
     @Produces(MediaType.APPLICATION_JSON)
     fun whoami(): Map<String, CordaX500Name> {
-        println(System.getProperty("user.dir"))
         return rpcOps.nodeInfo().legalIdentities.map { it.name }.associateBy { it.organisation + "::" + it.organisationUnit + "::" + it.commonName }
     }
 

@@ -1,7 +1,6 @@
 package com.stefano.corda.deposits.flow
 
 import co.paralleluniverse.fibers.Suspendable
-import com.stefano.corda.deposits.Deduction
 import com.stefano.corda.deposits.DepositContract
 import com.stefano.corda.deposits.DepositState
 import com.stefano.corda.deposits.flow.FundDepositFlow.getStateAndRefByLinearId
@@ -12,29 +11,18 @@ import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 
-object TenantSuggestAcceptDeductionFlow {
-
-    fun addDeduction(list1: List<Deduction>, item: Deduction): List<Deduction>{
-
-        val copy = list1.toMutableList();
-        copy += item;
-        return copy;
-
-    }
-
+object AcceptTenantDeductionsFlow {
 
     @InitiatingFlow
     @StartableByRPC
-    class Initiator(val depositId: UniqueIdentifier,
-                    val acceptedDeductions: List<Deduction>,
-                    val contestedDeductions: List<Deduction>) : FlowLogic<SignedTransaction>() {
+    class Initiator(val depositId: UniqueIdentifier) : FlowLogic<SignedTransaction>() {
         /**
          * The progress tracker checkpoints each stage of the flow and outputs the specified messages when each
          * checkpoint is reached in the code. See the 'progressTracker.currentStep' expressions within the call() function.
          */
         companion object {
             object FINDING_STATE : ProgressTracker.Step("Locating unfunded deposit to fund")
-            object APPLYING_DEDUCTION : ProgressTracker.Step("")
+            object COPYING_TENANT_DEDUCTIONS : ProgressTracker.Step("Updating State")
             object VERIFYING_TRANSACTION : ProgressTracker.Step("Verifying contract constraints.")
             object SIGNING_TRANSACTION : ProgressTracker.Step("Signing transaction with our private key.")
             object GATHERING_SIGS : ProgressTracker.Step("Gathering the counterparty's signature.") {
@@ -47,7 +35,7 @@ object TenantSuggestAcceptDeductionFlow {
 
             fun tracker() = ProgressTracker(
                     FINDING_STATE,
-                    APPLYING_DEDUCTION,
+                    COPYING_TENANT_DEDUCTIONS,
                     VERIFYING_TRANSACTION,
                     SIGNING_TRANSACTION,
                     GATHERING_SIGS,
@@ -70,23 +58,19 @@ object TenantSuggestAcceptDeductionFlow {
 
             val landlord = refAndState.state.data.landlord;
             val tenant = refAndState.state.data.tenant;
-            val depositIssuer = refAndState.state.data.issuer;
 
-            require(tenant == ourIdentity) { "deduction acceptance or modification must be initiated by tenant" }
+            require(landlord == ourIdentity) { "Accepting tenant deductions must only be done by landlord" }
 
-            val deductCommand = Command(
-                    DepositContract.Commands.TenantDeduct(refAndState.state.data.propertyId),
-                    listOf(landlord, tenant, depositIssuer).map { it.owningKey }
+            val fundCommand = Command(
+                    DepositContract.Commands.AcceptTenantDeductions(refAndState.state.data.propertyId),
+                    listOf(landlord, tenant).map { it.owningKey }
             )
-
-            progressTracker.currentStep = APPLYING_DEDUCTION
-
-            val copy = refAndState.state.data.copy(contestedDeductions = null, tenantDeductions = contestedDeductions)
-
+            progressTracker.currentStep = COPYING_TENANT_DEDUCTIONS
+            val copy = refAndState.state.data.copy(landlordDeductions = refAndState.state.data.tenantDeductions)
             val txBuilder = TransactionBuilder(notary)
                     .addInputState(refAndState)
                     .addOutputState(copy, DepositContract.DEPOSIT_CONTRACT_ID)
-                    .addCommand(deductCommand)
+                    .addCommand(fundCommand)
 
             progressTracker.currentStep = VERIFYING_TRANSACTION
             txBuilder.verify(serviceHub)
@@ -95,10 +79,10 @@ object TenantSuggestAcceptDeductionFlow {
             val partSignedTx = serviceHub.signInitialTransaction(txBuilder)
 
             val tenantFlow = initiateFlow(tenant)
-            val issuerFlow = initiateFlow(depositIssuer)
 
             progressTracker.currentStep = GATHERING_SIGS
-            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(issuerFlow, tenantFlow),
+
+            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(tenantFlow),
                     GATHERING_SIGS.childProgressTracker()))
 
             // Stage 5.
@@ -115,6 +99,7 @@ object TenantSuggestAcceptDeductionFlow {
             val flow = object : SignTransactionFlow(counterpartySession) {
                 @Suspendable
                 override fun checkTransaction(stx: SignedTransaction) {
+                    //all checks delegated to contract
                 }
             }
             val stx = subFlow(flow)

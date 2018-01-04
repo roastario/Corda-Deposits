@@ -1,3 +1,5 @@
+"use strict";
+
 async function onload() {
 
     setupDialogs();
@@ -19,6 +21,7 @@ async function onload() {
     loadPeers().then(function () {
         let getDepositsLoopable = function () {
             getDeposits();
+            getBalance();
             setTimeout(getDepositsLoopable, 1000);
         };
 
@@ -225,29 +228,32 @@ function populateDepositsToRefund(deposits) {
         let viewDeductionsButtonCell = document.createElement('td');
         let refundButtonCell = document.createElement('td');
 
-        if (!deposit.sentBackToTenantAt) {
+        if (_.isNil(deposit.sentBackToTenantAt)) {
+            //this is a deposit that needs to be sent to a tenant
+
             let deductButton = document.createElement('button');
             deductButton.onclick = function () {
                 beginDeduction(deposit.linearId);
             };
             deductButton.innerHTML = "Request Deduction";
             deductButtonCell.appendChild(deductButton);
-            if (deposit.landlordDeductions) {
-                const viewDeductionsButton = document.createElement('button');
-                viewDeductionsButton.innerHTML = "View Current Deductions";
-                viewDeductionsButton.onclick = function () {
-                    viewLandlordOnlyDeductions(deposit);
-                };
-                const sendDeductionsButton = document.createElement('button');
-                sendDeductionsButton.innerHTML = "Send To Tenant";
 
-                sendDeductionsButton.onclick = function () {
-                    sendDepositToTenant(deposit.linearId);
-                };
+            const viewDeductionsButton = document.createElement('button');
+            viewDeductionsButton.innerHTML = "View Current Deductions";
+            viewDeductionsButton.onclick = function () {
+                viewLandlordOnlyDeductions(deposit);
+            };
+            const sendDeductionsButton = document.createElement('button');
+            sendDeductionsButton.innerHTML = "Send To Tenant";
 
-                viewDeductionsButtonCell.append(viewDeductionsButton);
-                viewDeductionsButtonCell.append(sendDeductionsButton);
-            } else {
+            sendDeductionsButton.onclick = function () {
+                sendDepositToTenant(deposit.linearId);
+            };
+
+            viewDeductionsButtonCell.append(viewDeductionsButton);
+            viewDeductionsButtonCell.append(sendDeductionsButton);
+
+            if (_.isNil(deposit.landlordDeductions)){
                 let refundButton = document.createElement('button');
                 refundButton.onclick = () => {
                     refundDeposit(deposit.linearId);
@@ -255,6 +261,53 @@ function populateDepositsToRefund(deposits) {
                 refundButton.innerHTML = "Release Refund";
                 refundButtonCell.appendChild(refundButton);
             }
+
+
+
+        } else if (!_.isNil(deposit.sentBackToTenantAt) && _.isNil(deposit.sentBackToLandlordAt)) {
+            const viewDeductionsButton = document.createElement('button');
+            viewDeductionsButton.innerHTML = "View Current Deductions";
+            viewDeductionsButton.onclick = function () {
+                viewLandlordOnlyDeductions(deposit);
+            };
+            viewDeductionsButtonCell.append(viewDeductionsButton);
+        } else {
+            if (_.isEqual(deposit.tenantDeductions, deposit.landlordDeductions) || _.isNil(deposit.tenantDeductions)  || deposit.tenantDeductions.length === 0){
+                const viewDeductionsButton = document.createElement('button');
+                viewDeductionsButton.innerHTML = "View Current Deductions";
+                viewDeductionsButton.onclick = function () {
+                    viewLandlordOnlyDeductions(deposit);
+                };
+                viewDeductionsButtonCell.append(viewDeductionsButton);
+
+                //this deposit is ready to refund
+                let refundButton = document.createElement('button');
+                refundButton.onclick = () => {
+                    refundDeposit(deposit.linearId);
+                };
+                refundButton.innerHTML = "Release Refund";
+                refundButtonCell.appendChild(refundButton);
+            }else{
+                const viewDeductionsButton = document.createElement('button');
+                viewDeductionsButton.innerHTML = "View Current Deductions";
+                viewDeductionsButton.onclick = function () {
+                    viewLandlordOnlyDeductions(deposit);
+                };
+                viewDeductionsButtonCell.append(viewDeductionsButton);
+
+                //this deposit is ready to refund
+                let refundButton = document.createElement('button');
+                refundButton.onclick = () => {
+                    refundDeposit(deposit.linearId);
+                };
+                refundButton.innerHTML = "Accept and Refund";
+                refundButtonCell.appendChild(refundButton);
+
+                const arbitateButton = document.createElement('button');
+                arbitateButton.innerHTML = "Arbitrate!";
+                refundButtonCell.appendChild(arbitateButton)
+            }
+
         }
 
 
@@ -327,7 +380,7 @@ function populateDepositsWaitingForFunding(deposits) {
 
 function populateActiveDeposits(deposits) {
 
-    let holdingTable = document.getElementById("activeDeposits")
+    let holdingTable = document.getElementById("activeDeposits");
     holdingTable.innerHTML = "";
 
 
@@ -426,10 +479,18 @@ async function getInventoryBytes() {
         let fileReader = new FileReader();
         fileReader.onerror = reject;
         fileReader.onload = function () {
-            var arrayBuffer = this.result
+            var arrayBuffer = this.result;
             resolve(Array.from(new Uint8Array(arrayBuffer)));
         };
 
         fileReader.readAsArrayBuffer(inventoryInputFile);
+    });
+}
+
+function getBalance() {
+    asyncGet('/api/depositOps/balance', JSON.parse).then(function (balances) {
+        let numericBalance = balances[0];
+        document.getElementById('balance').innerHTML = "£" + (numericBalance / 100);
+        return numericBalance;
     });
 }

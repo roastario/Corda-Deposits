@@ -67,7 +67,10 @@ object TenantSendDepositBackToTLandlordDeductionsFlow {
             progressTracker.currentStep = UPDATING_STATE;
 
             val splitDeductions = splitDeductions(refAndState.state.data.landlordDeductions as List<Deduction>, deductionsFromTenant)
-            val copy = refAndState.state.data.copy(sentBackToLandlordAt = Instant.now(), contestedDeductions = splitDeductions.contested, tenantDeductions = deductionsFromTenant)
+            val copy = refAndState.state.data.copy(
+                    sentBackToLandlordAt = Instant.now(),
+                    contestedDeductions = splitDeductions.contested,
+                    tenantDeductions = deductionsFromTenant)
 
             val txBuilder = TransactionBuilder(notary)
                     .addInputState(refAndState)

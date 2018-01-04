@@ -5,7 +5,6 @@ async function doClick(){
     var currency = document.getElementById('currency').value;
     var returnedText = await asyncGet("/api/bankOps/issue-cash?currency="+currency+"&amount=" + amount);
 
-    console.log(returnedText);
 }
 
 async function onLoad(){

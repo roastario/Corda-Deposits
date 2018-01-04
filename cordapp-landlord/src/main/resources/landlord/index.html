@@ -9,6 +9,9 @@
 <div>
     <h1>Welcome Landlord</h1>
 </div>
+<div id="balanceHolder" align="right">
+    Your Balance is: <span id="balance"></span>
+</div>
 
 <div>
 
@@ -83,7 +86,12 @@
 <div>
     <h2>Deposits Awaiting Refund</h2>
     <table id="refundDeposits">
+    </table>
+</div>
 
+<div>
+    <h2>Refunded Deposits</h2>
+    <table id="refundedDeposits">
     </table>
 </div>
 
@@ -145,6 +153,8 @@
 <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@2.0.207/build/pdf.min.js" type="text/javascript"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.1.0/jquery.min.js" type="text/javascript"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js" type="text/javascript"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.4/lodash.min.js" type="text/javascript"></script>
+
 <script type="text/javascript" src="/web/js/asynchelper.js"></script>
 <script type="text/javascript" src="/web/js/landlord.js"></script>
 <script type="text/javascript" src="/web/js/pdfhelper.js"></script>

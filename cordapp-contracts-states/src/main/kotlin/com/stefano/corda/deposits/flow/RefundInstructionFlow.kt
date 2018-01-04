@@ -2,6 +2,9 @@ package com.stefano.corda.deposits.flow
 
 import co.paralleluniverse.fibers.Suspendable
 import com.stefano.corda.deposits.DepositState
+import com.stefano.corda.deposits.utils.generateSpendAvoidingDuplicateMoves
+import net.corda.confidential.IdentitySyncFlow
+import net.corda.core.contracts.Amount
 import net.corda.core.flows.*
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
@@ -43,6 +46,9 @@ object RefundInstructionFlow {
             issuerChannel.send(partialTx);
             issuerChannel.send(proposedDeposit);
             progressTracker.currentStep = VERIFYING_CASH_MOVEMENT
+
+            subFlow(IdentitySyncFlow.Receive(issuerChannel))
+
             return issuerChannel.receive(receiveType = TransactionBuilder::class.java).unwrap({ it });
         }
     }
@@ -58,6 +64,7 @@ object RefundInstructionFlow {
             object RECEIVING_REFUND_INFO : ProgressTracker.Step("Receiving refund data")
             object ADDING_TENANT_CASH_PAYMENT : ProgressTracker.Step("Moving cash to tenant")
             object ADDING_LANDLORD_CASH_PAYMENT : ProgressTracker.Step("Moving cash to landlord")
+            object SYNCING_IDENTITIES : ProgressTracker.Step("Sending anonymous party information bck to initiator")
             object SENDING_TX : ProgressTracker.Step("Sending completed transaction proposal")
             object DONE : ProgressTracker.Step("Finished")
 
@@ -67,7 +74,7 @@ object RefundInstructionFlow {
 
                     ADDING_TENANT_CASH_PAYMENT,
                     ADDING_LANDLORD_CASH_PAYMENT,
-
+                    SYNCING_IDENTITIES,
                     SENDING_TX,
                     DONE
             )
@@ -76,16 +83,47 @@ object RefundInstructionFlow {
         @Suspendable
         override fun call() {
             progressTracker.currentStep = RECEIVING_TX;
-            val proposedTransaction = counterpartySession.receive<TransactionBuilder>().unwrap { it };
+            var proposedTransaction = counterpartySession.receive<TransactionBuilder>().unwrap { it };
             progressTracker.currentStep = RECEIVING_REFUND_INFO
             val propopsedOutputState = counterpartySession.receive<DepositState>().unwrap { it };
+            val deductionsTotal = (propopsedOutputState.landlordDeductions?.sumByLong { it.deductionAmount.quantity })
+            var tenantAmount = propopsedOutputState.depositAmount;
+            deductionsTotal?.let { toSubstract ->
+                tenantAmount = tenantAmount.minus(Amount(toSubstract, propopsedOutputState.depositAmount.token))
+            }
             progressTracker.currentStep = ADDING_TENANT_CASH_PAYMENT
-            Cash.Companion.generateSpend(serviceHub, proposedTransaction, propopsedOutputState.depositAmount, propopsedOutputState.tenant)
+            if (tenantAmount.compareTo(Amount(0, propopsedOutputState.depositAmount.token)) > 0){
+                println("I AM GOING TO REFUND: $tenantAmount TO TENANT ")
+                proposedTransaction = Cash.Companion.generateSpendAvoidingDuplicateMoves(serviceHub, proposedTransaction,
+                        tenantAmount, propopsedOutputState.tenant)
+            }
+            deductionsTotal?.let {
+                progressTracker.currentStep = ADDING_LANDLORD_CASH_PAYMENT
+                val landLordAmount = propopsedOutputState.depositAmount.minus(tenantAmount)
+                println("I AM GOING TO REFUND: $landLordAmount TO LANDLORD ")
+                proposedTransaction = Cash.Companion.generateSpendAvoidingDuplicateMoves(serviceHub, proposedTransaction, landLordAmount, propopsedOutputState.landlord)
+            }
+
+            progressTracker.currentStep = SYNCING_IDENTITIES
+            // Sync up confidential identities in the transaction
+            subFlow(IdentitySyncFlow.Send(counterpartySession, proposedTransaction.toWireTransaction(serviceHub)))
+
             progressTracker.currentStep = SENDING_TX
             counterpartySession.send(proposedTransaction);
+
             progressTracker.currentStep = DONE;
         }
     }
 
 }
+
+private inline fun <T> Iterable<T>.sumByLong(selector: (T) -> Long): Long {
+    var sum: Long = 0
+    for (element in this) {
+        sum += selector(element)
+    }
+    return sum
+}
+
+
 
