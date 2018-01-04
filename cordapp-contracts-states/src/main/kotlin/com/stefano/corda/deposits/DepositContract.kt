@@ -20,11 +20,11 @@ open class DepositContract : Contract {
     override fun verify(tx: LedgerTransaction) {
         val command = tx.commands.requireSingleCommand<Commands>()
 
-        when (command.value){
+        when (command.value) {
             is Commands.Create -> {
                 requireThat {
 
-                    val depositInputs =  tx.inputsOfType<DepositState>()
+                    val depositInputs = tx.inputsOfType<DepositState>()
                     "there must be no deposit input states, this is the initial one" using (depositInputs.isEmpty())
                     "there must be no input states at all" using tx.inputStates.isEmpty()
 
@@ -39,8 +39,8 @@ open class DepositContract : Contract {
             is Commands.Fund -> {
                 requireThat {
 
-                    val depositInputStates =  tx.inputsOfType<DepositState>()
-                    val cashInputs =  tx.inputsOfType<Cash.State>()
+                    val depositInputStates = tx.inputsOfType<DepositState>()
+                    val cashInputs = tx.inputsOfType<Cash.State>()
                     "there must be one incoming deposit input state" using (depositInputStates.size == 1)
                     "there must be a cash input state" using (cashInputs.size == 1)
 
@@ -64,7 +64,7 @@ open class DepositContract : Contract {
                 requireThat {
                     val outputDeposit = tx.outputsOfType<DepositState>().first()
                     "there can be no landlord deductions or landlord deductions and tenant deductions must match" using
-                            (outputDeposit.landlordDeductions == null || outputDeposit.landlordDeductions.isEmpty() ||outputDeposit.landlordDeductions == outputDeposit.tenantDeductions)
+                            (outputDeposit.landlordDeductions == null || outputDeposit.landlordDeductions.isEmpty() || outputDeposit.landlordDeductions == outputDeposit.tenantDeductions)
                 }
             }
 
@@ -102,7 +102,6 @@ open class DepositContract : Contract {
     }
 
 
-
     /**
      * This contract only implements one command, Create.
      */
@@ -116,5 +115,8 @@ open class DepositContract : Contract {
         data class SendBackToTenant(val propertyId: String) : Commands
         data class SendBackToLandlord(val propertyId: String) : Commands
         data class Refund(val propertyId: String) : Commands
+        data class SendToArbitrator(val propertyId: String) : Commands {
+
+        }
     }
 }

@@ -35,7 +35,7 @@ function setupDialogs() {
             draggable: true,
             resizable: true,
             height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0) * 0.85,
-            width: Math.max(document.documentElement.clientWidth, window.innerWidth || 0),
+            width: Math.max(document.documentElement.clientWidth, window.innerWidth || 0) * 0.85,
         });
     });
 
@@ -63,6 +63,10 @@ function getDeposits() {
 
         loadedDeposits.forEach(stateAndRef => {
             let deposit = stateAndRef.state.data;
+            if (deposit.refundedAt){
+                closedDeposits.push(stateAndRef);
+                return;
+            }
             if (!deposit.amountDeposited) {
                 unfundedDeposits.push(stateAndRef);
             } else if (!deposit.refundRequestedAt) {
@@ -97,7 +101,10 @@ function getDeposits() {
             }
         }, 0);
         setTimeout(function () {
-            populateInactiveDeposits(splitDeposits.waitingForRefund, "waitingDeposits");
+            if (!_.isEqual(splitDeposits.waitingForRefund, window.waitingForRefund)) {
+                populateInactiveDeposits(splitDeposits.waitingForRefund, "waitingDeposits");
+                window.waitingForRefund = splitDeposits.waitingForRefund;
+            }
         }, 0);
         setTimeout(function () {
             populateInactiveDeposits(splitDeposits.closed, "refundedDeposits");

@@ -121,9 +121,17 @@ class LandlordApi(val rpcOps: CordaRPCOps) {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     fun acceptTenantDeductions(depositId: UniqueIdentifier): Response {
-        val flowHandle = rpcOps.startFlow(AcceptTenantDeductionsFlow::Initiator, depositId);
-        flowHandle.returnValue.getOrThrow();
-        return refund(depositId);
+        val flowHandle = rpcOps.startFlow(AcceptTenantDeductionsFlow::Initiator, depositId)
+        return Response.status(Response.Status.OK).entity(flowHandle.returnValue.getOrThrow()).build();
+    }
+
+    @POST
+    @Path("arbitrate")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    fun arbitrateDeposit(depositId: UniqueIdentifier): Response {
+        val flowHandle = rpcOps.startFlow(LandlordSendDepositToArbitratrRefundFlow::Initiator, depositId)
+        return Response.status(Response.Status.OK).entity(flowHandle.returnValue.getOrThrow()).build();
     }
 
     @GET

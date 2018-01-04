@@ -22,7 +22,7 @@ data class DepositState(val depositAmount: Amount<Currency>,
                         val amountPaidToTenant: Amount<Currency>? = null,
                         val landlordDeductions: List<Deduction>? = null,
                         val tenantDeductions: List<Deduction>? = null,
-                        val contestedDeductions: List<Deduction>? = null,
+                        val contestedDeductions: List<ArbitratorDeduction>? = null,
                         val refundRequestedAt: Instant? = null,
                         val refundedAt: Instant? = null,
                         val sentBackToTenantAt: Instant? = null,
@@ -37,3 +37,7 @@ data class Deduction(val deductionReason: String,
                      val deductionAmount: Amount<Currency>,
                      val picture: SecureHash,
                      val deductionId: UniqueIdentifier = UniqueIdentifier(deductionReason + deductionAmount.toString()));
+
+data class ArbitratorDeduction(val deductionId: UniqueIdentifier,
+                               val comment: String,
+                               val amount: Amount<Currency>)
