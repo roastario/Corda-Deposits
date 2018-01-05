@@ -116,7 +116,8 @@ open class DepositContract : Contract {
         data class SendBackToLandlord(val propertyId: String) : Commands
         data class Refund(val propertyId: String) : Commands
         data class SendToArbitrator(val propertyId: String) : Commands {
-
+        }
+        data class Arbitrate(val propertyId: String): Commands {
         }
     }
 }

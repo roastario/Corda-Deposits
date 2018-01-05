@@ -63,7 +63,7 @@ function getDeposits() {
 
         loadedDeposits.forEach(stateAndRef => {
             let deposit = stateAndRef.state.data;
-            if (deposit.refundedAt){
+            if (deposit.refundedAt) {
                 closedDeposits.push(stateAndRef);
                 return;
             }
@@ -107,10 +107,16 @@ function getDeposits() {
             }
         }, 0);
         setTimeout(function () {
-            populateInactiveDeposits(splitDeposits.closed, "refundedDeposits");
+            if (!_.isEqual(splitDeposits.closed, window.refunded)) {
+                populateInactiveDeposits(splitDeposits.closed, "refundedDeposits");
+                window.refunded = splitDeposits.closed;
+            }
         }, 0);
         setTimeout(function () {
-            populateInactiveDeposits(splitDeposits.contested, "contestedDeposits");
+            if (!_.isEqual(splitDeposits.contested, window.contested)) {
+                populateInactiveDeposits(splitDeposits.contested, "refundedDeposits");
+                window.contested = splitDeposits.contested;
+            }
         }, 0);
     });
 }
@@ -346,17 +352,15 @@ function viewAndContestDeductions(deposit) {
         });
 
 
-
-
         if (indexedTenantDeductions[deduction.deductionId.id]) {
             //this is a deduction with a corresponding tenant deduction
             const tenantCostCell = document.createElement('td');
 
-            tenantCostCell.innerHTML =  indexedTenantDeductions[deduction.deductionId.id].deductionAmount;
+            tenantCostCell.innerHTML = indexedTenantDeductions[deduction.deductionId.id].deductionAmount;
 
-            if (indexedTenantDeductions[deduction.deductionId.id].deductionAmount === deductionAmount){
+            if (indexedTenantDeductions[deduction.deductionId.id].deductionAmount === deductionAmount) {
                 tenantCostCell.style.backgroundColor = 'green';
-            }else{
+            } else {
                 tenantCostCell.style.backgroundColor = 'red'
             }
             rowHolder.appendChild(tenantCostCell);
@@ -421,6 +425,8 @@ function viewAndContestDeductions(deposit) {
                     }
                 ]
             );
+        } else {
+            deductionViewDialog.dialog("option", "buttons", []);
         }
         deductionViewDialog.dialog("open");
     });

@@ -192,8 +192,13 @@ async function getDeposits() {
         let activeDeposits = [];
         let depositsAwaitingRefunding = [];
         let closedDeposits = [];
+        let arbitratorDeposits = [];
 
         extractedDeposits.forEach(deposit => {
+            if (deposit.sentToArbiter){
+                arbitratorDeposits.push(deposit);
+                return;
+            }
             if (!deposit.amountDeposited) {
                 unfundedDeposits.push(deposit);
             } else if (!deposit.refundRequestedAt) {
@@ -208,6 +213,7 @@ async function getDeposits() {
         populateDepositsToRefund(depositsAwaitingRefunding);
         populateDepositsWaitingForFunding(unfundedDeposits);
         populateActiveDeposits(activeDeposits);
+        populateArbitratedDeposits(arbitratorDeposits);
     });
 
 }
@@ -218,6 +224,31 @@ function sendDepositToTenant(depositId) {
         getDeposits();
         return resolvedResponse;
     }, 10000);
+}
+
+function populateArbitratedDeposits(deposits){
+    // arbitratorDeposits
+
+    let holdingTable = document.getElementById("arbitratorDeposits");
+    holdingTable.innerHTML = "";
+
+    deposits.forEach(deposit => {
+        let row = document.createElement('tr');
+        let propertyIdCell = document.createElement('td');
+        let tenantNameCell = document.createElement('td');
+        let depositAmountCell = document.createElement('td');
+
+
+        propertyIdCell.innerHTML = deposit.propertyId;
+        tenantNameCell.innerHTML = deposit.tenant;
+        depositAmountCell.innerHTML = deposit.depositAmount;
+
+        row.appendChild(propertyIdCell);
+        row.appendChild(depositAmountCell);
+        row.appendChild(tenantNameCell);
+        holdingTable.appendChild(row);
+    });
+
 }
 
 function populateDepositsToRefund(deposits) {
