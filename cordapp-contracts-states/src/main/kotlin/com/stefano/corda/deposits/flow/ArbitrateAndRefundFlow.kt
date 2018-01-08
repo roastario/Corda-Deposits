@@ -5,8 +5,6 @@ import com.stefano.corda.deposits.ArbitratorDeduction
 import com.stefano.corda.deposits.DepositContract
 import com.stefano.corda.deposits.DepositState
 import com.stefano.corda.deposits.flow.FundDepositFlow.getStateAndRefByLinearId
-import com.stefano.corda.deposits.utils.copyTo
-import com.stefano.corda.deposits.utils.generateSpendAvoidingDuplicateMoves
 import net.corda.confidential.IdentitySyncFlow
 import net.corda.core.contracts.*
 import net.corda.core.flows.*
@@ -14,6 +12,8 @@ import net.corda.core.transactions.SignedTransaction
 import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 import net.corda.finance.contracts.asset.Cash
+import net.corda.finance.contracts.asset.PartyAndAmount
+import java.time.Instant
 
 
 object ArbitrateAndRefundFlow {
@@ -32,14 +32,19 @@ object ArbitrateAndRefundFlow {
             object ADDING_CASH_FOR_TENANT : ProgressTracker.Step("Asking for cash");
             object ADDING_CASH_FOR_LANDLORD : ProgressTracker.Step("Asking for cash");
             object VERIFYING_CASH_MOVEMENT : ProgressTracker.Step("Checking Cash");
+            object DONE : ProgressTracker.Step("Done");
 
+            object FINALISING_TRANSACTION : ProgressTracker.Step("Obtaining notary signature and recording transaction.") {
+                override fun childProgressTracker() = FinalityFlow.tracker()
+            }
 
             fun tracker() = ProgressTracker(
                     FINDING_STATE,
                     UPDATING_STATE,
                     ADDING_CASH_FOR_TENANT,
                     ADDING_CASH_FOR_LANDLORD,
-                    VERIFYING_CASH_MOVEMENT
+                    VERIFYING_CASH_MOVEMENT,
+                    DONE
             )
         }
 
@@ -54,7 +59,7 @@ object ArbitrateAndRefundFlow {
 
             progressTracker.currentStep = UPDATING_STATE;
 
-            val copy = refAndState.state.data.copy(contestedDeductions = deductions);
+            val copy = refAndState.state.data.copy(contestedDeductions = deductions, refundedAt = Instant.now());
             progressTracker.currentStep = ADDING_CASH_FOR_TENANT;
 
 
@@ -75,13 +80,11 @@ object ArbitrateAndRefundFlow {
                 tenantAmount = tenantAmount.minus(Amount(toSubstract, copy.depositAmount.token))
             }
             val landlordAmount = copy.depositAmount.minus(tenantAmount);
+            progressTracker.currentStep = ADDING_CASH_FOR_LANDLORD;
 
-            txBuilder = Cash.generateSpendAvoidingDuplicateMoves(serviceHub, txBuilder, landlordAmount, copy.landlord)
-            txBuilder = Cash.generateSpendAvoidingDuplicateMoves(serviceHub, txBuilder, tenantAmount, copy.tenant)
-
-
-            var prunedBuilder = TransactionBuilder(notary)
-            txBuilder = txBuilder.copyTo(prunedBuilder, serviceHub, filterInputStates = { !prunedBuilder.inputStates().contains(it.ref) })
+            txBuilder = Cash.generateSpend(serviceHub, txBuilder, listOf(
+                    PartyAndAmount(copy.landlord, landlordAmount),
+                    PartyAndAmount(copy.tenant, tenantAmount))).first
 
             //sync cash input states
             val landlordSession = initiateFlow(copy.landlord)
@@ -99,18 +102,16 @@ object ArbitrateAndRefundFlow {
             subFlow(IdentitySyncFlow.Send(tenantSession, txBuilder.toWireTransaction(serviceHub)))
 
 
+            txBuilder.verify(serviceHub)
             val partSignedTx = serviceHub.signInitialTransaction(txBuilder)
 
-            val sessionsToCollectFrom = listOf(copy.landlord, copy.tenant, copy.issuer).filter { it != ourIdentity }
-                    .map { initiateFlow(it) }
-                    .toSet()
 
-            progressTracker.currentStep = DepositIssueFlow.Initiator.Companion.GATHERING_SIGS
-            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, sessionsToCollectFrom,
+            progressTracker.currentStep = VERIFYING_CASH_MOVEMENT
+            val fullySignedTx = subFlow(CollectSignaturesFlow(partSignedTx, setOf(landlordSession, tenantSession),
                     DepositIssueFlow.Initiator.Companion.GATHERING_SIGS.childProgressTracker()))
 
-            progressTracker.currentStep = DepositIssueFlow.Initiator.Companion.FINALISING_TRANSACTION
-            return subFlow(FinalityFlow(fullySignedTx, DepositIssueFlow.Initiator.Companion.FINALISING_TRANSACTION.childProgressTracker()))
+            progressTracker.currentStep = DONE
+            return subFlow(FinalityFlow(fullySignedTx, FINALISING_TRANSACTION.childProgressTracker()))
 
         }
     }
@@ -134,7 +135,9 @@ object ArbitrateAndRefundFlow {
 
         @Suspendable
         override fun call(): SignedTransaction {
+            progressTracker.currentStep = RECEIVING_STATES
             subFlow(ReceiveStateAndRefFlow<FungibleAsset<*>>(counterpartySession))
+            progressTracker.currentStep = RECEIVING_IDENTITIES
             subFlow(IdentitySyncFlow.Receive(counterpartySession))
             val flow = object : SignTransactionFlow(counterpartySession) {
                 @Suspendable
@@ -143,7 +146,9 @@ object ArbitrateAndRefundFlow {
                 }
             }
             val stx = subFlow(flow)
-            return waitForLedgerCommit(stx.id)
+            val commit = waitForLedgerCommit(stx.id)
+            progressTracker.currentStep = DONE
+            return commit
         }
     }
 

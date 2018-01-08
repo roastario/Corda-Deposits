@@ -1,16 +1,26 @@
 package com.stefano.corda.deposits
 
-import net.corda.core.contracts.CommandData
-import net.corda.core.contracts.Contract
-import net.corda.core.contracts.requireSingleCommand
-import net.corda.core.contracts.requireThat
+import com.stefano.corda.deposits.flow.sumByLong
+import net.corda.core.contracts.*
+import net.corda.core.identity.Party
 import net.corda.core.transactions.LedgerTransaction
 import net.corda.finance.contracts.asset.Cash
+import java.util.*
 
 open class DepositContract : Contract {
     companion object {
         @JvmStatic
         val DEPOSIT_CONTRACT_ID = "com.stefano.corda.deposits.DepositContract"
+
+        fun sumCashForParty(states: Collection<Cash.State>, party: Party): Amount<Currency> {
+            return states.filter { it.owner == party }.fold(Amount(0, states.first().amount.token.product), { acc, state ->
+                acc.plus(Amount(state.amount.quantity, state.amount.token.product))
+            })
+        }
+
+        fun sumDeductions(deductions: Collection<Deduction>?): Long {
+            return deductions?.sumByLong { deduction -> deduction.deductionAmount.quantity } ?: 0
+        }
     }
 
     /**
@@ -36,6 +46,7 @@ open class DepositContract : Contract {
                     "the landlord and tenants must be different" using (outputState.landlord != outputState.tenant)
                 }
             }
+
             is Commands.Fund -> {
                 requireThat {
 
@@ -63,11 +74,28 @@ open class DepositContract : Contract {
             is Commands.Refund -> {
                 requireThat {
                     val outputDeposit = tx.outputsOfType<DepositState>().first()
+
+                    val tenantDeductionsTotal = sumDeductions(outputDeposit.tenantDeductions)
+                    val landlordDeductionsTotal = sumDeductions(outputDeposit.landlordDeductions)
+
                     "there can be no landlord deductions or landlord deductions and tenant deductions must match" using
-                            (outputDeposit.landlordDeductions == null || outputDeposit.landlordDeductions.isEmpty() || outputDeposit.landlordDeductions == outputDeposit.tenantDeductions)
+                            (outputDeposit.landlordDeductions == null ||
+                                    outputDeposit.landlordDeductions.isEmpty() ||
+                                    tenantDeductionsTotal == landlordDeductionsTotal)
+
+
+                    val tenantPayment = sumCashForParty(tx.outputsOfType(), outputDeposit.tenant);
+                    val landlordPayment = sumCashForParty(tx.outputsOfType(), outputDeposit.landlord);
+
+
+                    "payment to landlord must equal the deductions accepted " using
+                            (landlordPayment.quantity == landlordDeductionsTotal)
+
+                    "payment to tenant must equal deposit amount minus deductions" using
+                            (outputDeposit.depositAmount.minus(tenantPayment) == landlordPayment)
+
                 }
             }
-
 
             is Commands.SendBackToTenant -> {
                 requireThat {
@@ -91,11 +119,74 @@ open class DepositContract : Contract {
                             (outputDeposit.tenantDeductions != null && !outputDeposit.tenantDeductions.isEmpty())
 
                     val inputDeposit = tx.inputsOfType<DepositState>().first()
-                    "this deposit must not be refunded or already sent to tenant" using
+                    "this deposit must not be refunded or already sent to landlord" using
                             (inputDeposit.refundedAt == null && inputDeposit.sentBackToLandlordAt == null)
 
                     "output state must have a sent to landlord time " using
                             (outputDeposit.sentBackToLandlordAt != null)
+                }
+            }
+
+            is Commands.SendToArbitrator -> {
+                requireThat {
+                    val outputDeposit = tx.outputsOfType<DepositState>().first()
+                    val inputDeposit = tx.inputsOfType<DepositState>().first()
+
+                    "this deposit must not be refunded" using
+                            (inputDeposit.refundedAt == null)
+
+                    "input deposit state must have a sent to landlord time " using
+                            (inputDeposit.sentBackToLandlordAt != null)
+
+                    "input deposit state must have a sent to tenant time " using
+                            (inputDeposit.sentBackToTenantAt != null)
+
+                    "there must be landlord deductions" using (
+                            inputDeposit.landlordDeductions != null &&
+                                    inputDeposit.landlordDeductions.isNotEmpty()
+                            )
+
+                    "there must be tenant deductions" using (
+                            inputDeposit.tenantDeductions != null &&
+                                    inputDeposit.tenantDeductions.isNotEmpty())
+
+                    "output deposit state must have a sent to arbiter time " using
+                            (outputDeposit.sentToArbiter != null)
+
+                    "only state modified on deposit can be time sent to arbiter" using
+                            outputDeposit.isEqualToExcluding(inputDeposit, setOf(DepositState::sentToArbiter))
+
+                }
+            }
+
+            is Commands.Arbitrate -> {
+                requireThat {
+                    val outputDeposit = tx.outputsOfType<DepositState>().first()
+                    val inputDeposit = tx.inputsOfType<DepositState>().first()
+
+                    "there must be landlord deductions" using (
+                            inputDeposit.landlordDeductions != null &&
+                                    inputDeposit.landlordDeductions.isNotEmpty()
+                            )
+
+                    "there must be tenant deductions" using (
+                            inputDeposit.tenantDeductions != null &&
+                                    inputDeposit.tenantDeductions.isNotEmpty())
+
+                    "this deposit must not be refunded" using
+                            (inputDeposit.refundedAt == null)
+
+                    "input deposit state must have a sent to landlord time " using
+                            (inputDeposit.sentBackToLandlordAt != null)
+
+                    "input deposit state must have a sent to tenant time " using
+                            (inputDeposit.sentBackToTenantAt != null)
+
+                    "input deposit state must have a sent to arbiter time " using
+                            (inputDeposit.sentToArbiter != null)
+
+                    "only state modified on deposit can be list of contested deductions and the refund time" using
+                            outputDeposit.isEqualToExcluding(inputDeposit, setOf(DepositState::contestedDeductions, DepositState::refundedAt))
                 }
             }
         }
@@ -117,7 +208,8 @@ open class DepositContract : Contract {
         data class Refund(val propertyId: String) : Commands
         data class SendToArbitrator(val propertyId: String) : Commands {
         }
-        data class Arbitrate(val propertyId: String): Commands {
+
+        data class Arbitrate(val propertyId: String) : Commands {
         }
     }
 }

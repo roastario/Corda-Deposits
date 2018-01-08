@@ -56,9 +56,9 @@ fun TransactionBuilder.copyTo(
         filterCommands: (command: Command<*>) -> Boolean = { true },
         filterAttachments: (attachment: SecureHash) -> Boolean = { true }
 ): TransactionBuilder {
-    inputStates().map { serviceHub.toStateAndRef<ContractState>(it) }.filter(filterInputStates).forEach { other.addInputState(it) }
-    outputStates().filter(filterOutputStates).map { other.addOutputState(it) }
-    commands().filter(filterCommands).forEach { other.addCommand(it) }
-    attachments().filter(filterAttachments).forEach { other.addAttachment(it) }
+    inputStates().toSet().map { serviceHub.toStateAndRef<ContractState>(it) }.filter(filterInputStates).forEach { other.addInputState(it) }
+    outputStates().toSet().filter(filterOutputStates).map { other.addOutputState(it) }
+    commands().toSet().filter(filterCommands).forEach { other.addCommand(it) }
+    attachments().toSet().filter(filterAttachments).forEach { other.addAttachment(it) }
     return other;
 }

@@ -99,7 +99,7 @@ function setupDialogs() {
             closeOnEscape: false,
             draggable: true,
             resizable: true,
-            height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0)
+            height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0) * 0.85
         });
     });
     $(function () {
@@ -124,6 +124,20 @@ function setupDialogs() {
         buttons: {}
     });
 
+
+    $(function () {
+        $("#reportDialog").dialog({
+            autoOpen: true,
+            modal: true,
+            width: 'auto',
+            closeOnEscape: false,
+            draggable: true,
+            resizable: true,
+            height: Math.max(document.documentElement.clientHeight, window.innerHeight || 0) * 0.85
+        });
+
+        $("#reportDialog").dialog('close');
+    });
 
     $(function () {
         $("#depositStatusDialog").dialog("close");
@@ -180,42 +194,65 @@ async function sendDepositRequest() {
     });
 }
 
+
+function populateRefundedDeposits(deposits) {
+    let holdingTable = document.getElementById("refundedDeposits");
+    holdingTable.innerHTML = "";
+    deposits.forEach(deposit => {
+        let row = document.createElement('tr');
+        let propertyIdCell = document.createElement('td');
+        let tenantNameCell = document.createElement('td');
+        let depositAmountCell = document.createElement('td');
+
+        let viewReportCell = document.createElement('td');
+        let viewReportButton = document.createElement('button');
+        viewReportButton.innerHTML = "View Report";
+        viewReportCell.appendChild(viewReportButton);
+        viewReportButton.onclick = function(){
+            populateDepositReport(deposit, document.getElementById('reportDialog'), 'depositOps')
+        };
+
+
+        let viewInventoryCell = document.createElement('td');
+        let viewInventoryButton = document.createElement('button');
+        viewInventoryButton.onclick = function () {
+            loadAndShowInventory(deposit.inventory);
+        };
+        viewInventoryButton.innerHTML = "View Inventory";
+        viewInventoryCell.appendChild(viewInventoryButton);
+        
+        propertyIdCell.innerHTML = deposit.propertyId;
+        tenantNameCell.innerHTML = deposit.tenant;
+        depositAmountCell.innerHTML = deposit.depositAmount;
+        row.appendChild(propertyIdCell);
+        row.appendChild(depositAmountCell);
+        row.appendChild(tenantNameCell);
+        row.appendChild(viewInventoryButton);
+        row.appendChild(viewReportCell);
+        holdingTable.appendChild(row);
+    });
+}
+
 async function getDeposits() {
 
     return asyncGet("/api/depositOps/deposits", JSON.parse).then((deposits) => {
         return deposits.map((incoming) => {
             return incoming.state.data;
         })
-    }).then(function (extractedDeposits) {
-
-        let unfundedDeposits = [];
-        let activeDeposits = [];
-        let depositsAwaitingRefunding = [];
-        let closedDeposits = [];
-        let arbitratorDeposits = [];
-
-        extractedDeposits.forEach(deposit => {
-            if (deposit.sentToArbiter){
-                arbitratorDeposits.push(deposit);
-                return;
-            }
-            if (!deposit.amountDeposited) {
-                unfundedDeposits.push(deposit);
-            } else if (!deposit.refundRequestedAt) {
-                activeDeposits.push(deposit);
-            } else if (!deposit.refundedAt) {
-                depositsAwaitingRefunding.push(deposit);
-            } else {
-                closedDeposits.push(deposit);
-            }
-        });
-
-        populateDepositsToRefund(depositsAwaitingRefunding);
-        populateDepositsWaitingForFunding(unfundedDeposits);
-        populateActiveDeposits(activeDeposits);
-        populateArbitratedDeposits(arbitratorDeposits);
-    });
-
+    }).then(deposits => {
+        if (!_.isEqual(window.oldDeposits, deposits)) {
+            window.oldDeposits = deposits;
+            return splitDeposits(deposits)
+        }
+    }).then(function (processedDeposits) {
+        if (processedDeposits) {
+            populateDepositsToRefund(_.concat(processedDeposits.waitingForLandlordAfterRefundRequest, processedDeposits.waitingForLandlordAfterDeductions));
+            populateDepositsWaitingForFunding(processedDeposits.waitingForFunds);
+            populateActiveDeposits(processedDeposits.waitingForRefundRequest);
+            populateArbitratedDeposits(processedDeposits.waitingForArbitration);
+            populateRefundedDeposits(processedDeposits.refunded);
+        }
+    })
 }
 
 function sendDepositToTenant(depositId) {
@@ -226,29 +263,23 @@ function sendDepositToTenant(depositId) {
     }, 10000);
 }
 
-function populateArbitratedDeposits(deposits){
+function populateArbitratedDeposits(deposits) {
     // arbitratorDeposits
-
     let holdingTable = document.getElementById("arbitratorDeposits");
     holdingTable.innerHTML = "";
-
     deposits.forEach(deposit => {
         let row = document.createElement('tr');
         let propertyIdCell = document.createElement('td');
         let tenantNameCell = document.createElement('td');
         let depositAmountCell = document.createElement('td');
-
-
         propertyIdCell.innerHTML = deposit.propertyId;
         tenantNameCell.innerHTML = deposit.tenant;
         depositAmountCell.innerHTML = deposit.depositAmount;
-
         row.appendChild(propertyIdCell);
         row.appendChild(depositAmountCell);
         row.appendChild(tenantNameCell);
         holdingTable.appendChild(row);
     });
-
 }
 
 function populateDepositsToRefund(deposits) {
@@ -482,7 +513,7 @@ function refundAcceptingTenantDeductions(depositId) {
 
 function sendDepositToArbitration(depositId) {
     console.log("sending to arbiter: " + JSON.stringify(depositId));
-    return asyncPost(depositId, '/api/depositOps/arbitrate', JSON.parse, 10000).then(function(response){
+    return asyncPost(depositId, '/api/depositOps/arbitrate', JSON.parse, 10000).then(function (response) {
         console.log("successfully sent deposit : " + JSON.stringify(depositId) + " to arbiter")
     });
 }

@@ -66,8 +66,8 @@ function populateSelectWithItems(selectElement, loadedItems) {
         let optionElement = document.createElement("option");
         optionElement.value = JSON.stringify(loadedItem);
         optionElement.innerHTML = optionElement.value;
-        optionElement.data = {}
-        optionElement.data['obj'] = loadedItem
+        optionElement.data = {};
+        optionElement.data['obj'] = loadedItem;
         selectElement.appendChild(optionElement);
     })
 }
@@ -92,8 +92,8 @@ function base64ArrayBuffer(arrayBuffer) {
 
         // Use bitmasks to extract 6-bit segments from the triplet
         a = (chunk & 16515072) >> 18 // 16515072 = (2^6 - 1) << 18
-        b = (chunk & 258048)   >> 12 // 258048   = (2^6 - 1) << 12
-        c = (chunk & 4032)     >>  6 // 4032     = (2^6 - 1) << 6
+        b = (chunk & 258048) >> 12 // 258048   = (2^6 - 1) << 12
+        c = (chunk & 4032) >> 6 // 4032     = (2^6 - 1) << 6
         d = chunk & 63               // 63       = 2^6 - 1
 
         // Convert the raw binary segments to the appropriate ASCII encoding
@@ -107,20 +107,172 @@ function base64ArrayBuffer(arrayBuffer) {
         a = (chunk & 252) >> 2 // 252 = (2^6 - 1) << 2
 
         // Set the 4 least significant bits to zero
-        b = (chunk & 3)   << 4 // 3   = 2^2 - 1
+        b = (chunk & 3) << 4 // 3   = 2^2 - 1
 
         base64 += encodings[a] + encodings[b] + '=='
     } else if (byteRemainder === 2) {
         chunk = (bytes[mainLength] << 8) | bytes[mainLength + 1]
 
         a = (chunk & 64512) >> 10 // 64512 = (2^6 - 1) << 10
-        b = (chunk & 1008)  >>  4 // 1008  = (2^6 - 1) << 4
+        b = (chunk & 1008) >> 4 // 1008  = (2^6 - 1) << 4
 
         // Set the 2 least significant bits to zero
-        c = (chunk & 15)    <<  2 // 15    = 2^4 - 1
+        c = (chunk & 15) << 2 // 15    = 2^4 - 1
 
         base64 += encodings[a] + encodings[b] + encodings[c] + '='
     }
 
     return base64
+}
+
+function splitDeposits(incommingDeposits) {
+
+
+    const refundedDeposits = [];
+    const depositsAtArbitration = [];
+    const depositsWaitingForLandLordResponseToDeductions = [];
+    const depositsWaitingForTenantResponseToDeductions = [];
+    const depositsWaitingForLandlordAfterRefundRequest = [];
+    const depositsWaitingForTenantToRequestRefund = [];
+    const depositsWaitingForTenantFunding = [];
+
+
+    incommingDeposits.forEach(deposit => {
+
+
+        if (!_.isNil(deposit.refundedAt)) {
+            refundedDeposits.push(deposit);
+            return;
+        }
+
+        if (!_.isNil(deposit.sentToArbiter)) {
+            depositsAtArbitration.push(deposit);
+            return;
+        }
+
+        if (!_.isNil(deposit.sentBackToLandlordAt)) {
+            depositsWaitingForLandLordResponseToDeductions.push(deposit);
+            return;
+        }
+
+        if (!_.isNil(deposit.sentBackToTenantAt)) {
+            depositsWaitingForTenantResponseToDeductions.push(deposit);
+            return;
+        }
+
+        if (!_.isNil(deposit.refundRequestedAt)) {
+            depositsWaitingForLandlordAfterRefundRequest.push(deposit);
+            return;
+        }
+
+        if (!_.isNil(deposit.amountDeposited)) {
+            depositsWaitingForTenantToRequestRefund.push(deposit);
+        } else {
+            depositsWaitingForTenantFunding.push(deposit);
+        }
+    });
+
+    return {
+        waitingForFunds: depositsWaitingForTenantFunding,
+        waitingForRefundRequest: depositsWaitingForTenantToRequestRefund,
+        waitingForLandlordAfterRefundRequest: depositsWaitingForLandlordAfterRefundRequest,
+        waitingForTenantAfterDeductions: depositsWaitingForTenantResponseToDeductions,
+        waitingForLandlordAfterDeductions: depositsWaitingForLandLordResponseToDeductions,
+        waitingForArbitration: depositsAtArbitration,
+        refunded: refundedDeposits
+    };
+
+}
+
+function populateDepositReport(deposit, dialog, apiName) {
+
+    dialog.innerHTML = '';
+
+    const contractBetweenTemplate = '<div class="contractBetweenInfo">' +
+        '   <span>Between: </span>' +
+        '   <span><strong><%=landlord%></strong></span>' +
+        '   <span>And: </span>' +
+        '   <span><strong><%= tenant %></strong></span>' +
+        '</div>';
+
+    const contractBetweenEvaluator = _.template(contractBetweenTemplate);
+    const contractInfoDiv = document.createElement('div');
+    contractInfoDiv.innerHTML = contractBetweenEvaluator(deposit);
+
+    const refundRequestDateTemplate = '<div>' +
+        '   <span>Refund Requested on: </span>' +
+        '   <span><strong><%= refundRequestDate%></strong></span>';
+    const refundRequestDateEvaluator = _.template(refundRequestDateTemplate);
+    const refundRequestDateDiv = document.createElement('div');
+    refundRequestDateDiv.innerHTML = refundRequestDateEvaluator({refundRequestDate: new Date(deposit.refundRequestedAt * 1000)});
+
+
+    const refundingDateTemplate = '<div>' +
+        '   <span>Refunded on: </span>' +
+        '   <span><strong><%= refundingDate%></strong></span>';
+    const refundingDateEvaluator = _.template(refundingDateTemplate);
+    const refundingDateDiv = document.createElement('div');
+    refundingDateDiv.innerHTML = refundingDateEvaluator({refundingDate: new Date(deposit.refundedAt * 1000)});
+
+    dialog.appendChild(contractInfoDiv);
+    dialog.appendChild(refundRequestDateDiv);
+    dialog.appendChild(refundingDateDiv);
+
+    const indexer = function (value) {
+        return value.deductionId.id;
+    };
+
+    const indexedTenantDeductions = _.keyBy(deposit.tenantDeductions, indexer);
+    const indexedArbitratorDeductions = _.keyBy(deposit.contestedDeductions, indexer);
+    const indexedLandlordDeductions = _.keyBy(deposit.landlordDeductions, indexer);
+
+
+    _.forEach(indexedLandlordDeductions, (deduction, deductionId) => {
+
+
+        const row = document.createElement('div');
+        const reasonCell = document.createElement('span');
+        const pictureCell = document.createElement('span');
+
+        const landlordAmountCell = document.createElement('span');
+        const tenantAmountCell = document.createElement('span');
+
+        const arbiterAmountAndReasonCell = document.createElement('span');
+
+        reasonCell.innerHTML = deduction.deductionReason;
+        landlordAmountCell.innerHTML = " Deduction: " + deduction.deductionAmount;
+
+        if (indexedTenantDeductions[deductionId]) {
+            tenantAmountCell.innerHTML = " Tenant: " + indexedTenantDeductions[deductionId].deductionAmount;
+        }
+
+        if (indexedArbitratorDeductions[deductionId]) {
+            arbiterAmountAndReasonCell.innerHTML = " Arbitrator: " + indexedArbitratorDeductions[deductionId].amount + "( " +
+                indexedArbitratorDeductions[deductionId].comment + " )"
+        }
+
+        asyncDownload('/api/' + apiName + '/deductionImage?imageId=' + deduction.picture).then(function (binaryArrayBuffer) {
+            const base64Data = base64ArrayBuffer(binaryArrayBuffer);
+            const outputImg = document.createElement('img');
+            outputImg.style.width = '500px';
+            outputImg.style.height = '500px';
+            outputImg.src = 'data:image/png;base64,' + base64Data;
+            pictureCell.appendChild(outputImg);
+        }).catch(error => {
+            console.error('failed to get deduction image due to: ' + error)
+        });
+
+        row.appendChild(reasonCell);
+        row.appendChild(pictureCell);
+        row.appendChild(landlordAmountCell);
+        row.appendChild(tenantAmountCell);
+        row.appendChild(arbiterAmountAndReasonCell);
+
+        dialog.appendChild(row);
+
+    });
+
+    $(dialog).dialog('open');
+
+
 }

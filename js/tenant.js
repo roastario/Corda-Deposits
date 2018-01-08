@@ -54,70 +54,27 @@ function getBalance() {
 }
 
 function getDeposits() {
-    asyncGet('/api/tenantOps/mydeposits', JSON.parse).then(function (loadedDeposits) {
-        let unfundedDeposits = [];
-        let activeDeposits = [];
-        let depositsAwaitingRefunding = [];
-        let contestedDeposits = [];
-        let closedDeposits = [];
-
-        loadedDeposits.forEach(stateAndRef => {
-            let deposit = stateAndRef.state.data;
-            if (deposit.refundedAt) {
-                closedDeposits.push(stateAndRef);
-                return;
+    asyncGet('/api/tenantOps/mydeposits', JSON.parse)
+        .then(deposits => {
+            return deposits.map(deposit => {
+                return deposit.state.data;
+            });
+        })
+        .then(deposits => {
+            if (!_.isEqual(window.oldDeposits, deposits)) {
+                window.oldDeposits = deposits;
+                return splitDeposits(deposits)
             }
-            if (!deposit.amountDeposited) {
-                unfundedDeposits.push(stateAndRef);
-            } else if (!deposit.refundRequestedAt) {
-                activeDeposits.push(stateAndRef);
-            } else if (!deposit.refundedAt && !deposit.sentBackToLandlordAt) {
-                depositsAwaitingRefunding.push(stateAndRef);
-            } else if (deposit.sentBackToLandlordAt) {
-                contestedDeposits.push(stateAndRef);
-            }
-            else {
-                closedDeposits.push(stateAndRef);
-            }
-        });
-        return {
-            funded: activeDeposits,
-            unfunded: unfundedDeposits,
-            waitingForRefund: depositsAwaitingRefunding,
-            closed: closedDeposits,
-            contested: contestedDeposits
+        }).then(function (processDeposits) {
+        if (processDeposits) {
+            populateFundedDepositTable(processDeposits.waitingForRefundRequest);
+            populateUnfundedDepositTable(processDeposits.waitingForFunds);
+            populateInactiveDeposits(_.concat(
+                processDeposits.waitingForLandlordAfterRefundRequest,
+                processDeposits.waitingForTenantAfterDeductions
+            ), "waitingDeposits");
+            populateInactiveDeposits(processDeposits.refunded, "refundedDeposits");
         }
-    }).then(splitDeposits => {
-        setTimeout(function () {
-            if (!_.isEqual(splitDeposits.funded, window.fundedDeposits)) {
-                populateFundedDepositTable(splitDeposits.funded);
-                window.fundedDeposits = splitDeposits.funded;
-            }
-        }, 0);
-        setTimeout(function () {
-            if (!_.isEqual(splitDeposits.unfunded, window.unfundedDeposits)) {
-                populateUnfundedDepositTable(splitDeposits.unfunded);
-                window.unfundedDeposits = splitDeposits.unfunded;
-            }
-        }, 0);
-        setTimeout(function () {
-            if (!_.isEqual(splitDeposits.waitingForRefund, window.waitingForRefund)) {
-                populateInactiveDeposits(splitDeposits.waitingForRefund, "waitingDeposits");
-                window.waitingForRefund = splitDeposits.waitingForRefund;
-            }
-        }, 0);
-        setTimeout(function () {
-            if (!_.isEqual(splitDeposits.closed, window.refunded)) {
-                populateInactiveDeposits(splitDeposits.closed, "refundedDeposits");
-                window.refunded = splitDeposits.closed;
-            }
-        }, 0);
-        setTimeout(function () {
-            if (!_.isEqual(splitDeposits.contested, window.contested)) {
-                populateInactiveDeposits(splitDeposits.contested, "refundedDeposits");
-                window.contested = splitDeposits.contested;
-            }
-        }, 0);
     });
 }
 
@@ -149,8 +106,7 @@ function populateInactiveDeposits(loadedDeposits, tableId) {
     let table = document.getElementById(tableId);
     table.innerHTML = "";
 
-    (loadedDeposits || []).forEach(function (depositState) {
-        let loadedDeposit = depositState.state.data;
+    (loadedDeposits || []).forEach(function (loadedDeposit) {
         let row = document.createElement('tr');
         let propertyIdCell = document.createElement('td');
         let landlordCell = document.createElement('td');
@@ -191,8 +147,7 @@ function populateFundedDepositTable(loadedDeposits) {
     let table = document.getElementById('fundedDepositTable');
     table.innerHTML = "";
 
-    loadedDeposits.forEach(function (depositState) {
-        let loadedDeposit = depositState.state.data;
+    loadedDeposits.forEach(function (loadedDeposit) {
         let row = document.createElement('tr');
         let propertyIdCell = document.createElement('td');
         let landlordCell = document.createElement('td');
@@ -236,8 +191,7 @@ function populateUnfundedDepositTable(loadedDeposits) {
     let table = document.getElementById('unfundedDepositTable');
     table.innerHTML = "";
 
-    loadedDeposits.forEach(function (depositState) {
-        let loadedDeposit = depositState.state.data;
+    loadedDeposits.forEach(function (loadedDeposit) {
         let row = document.createElement('tr');
         let propertyIdCell = document.createElement('td');
         let landlordCell = document.createElement('td');
@@ -308,7 +262,6 @@ function viewAndContestDeductions(deposit) {
         return value.deductionId.id;
     };
     const indexedTenantDeductions = _.keyBy(tenantDeductions, indexer);
-
     const deductionDialog = document.getElementById('deductionViewDialog');
     deductionDialog.innerHTML = '';
 

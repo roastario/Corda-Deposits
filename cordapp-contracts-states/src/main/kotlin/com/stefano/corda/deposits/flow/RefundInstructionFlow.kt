@@ -2,7 +2,6 @@ package com.stefano.corda.deposits.flow
 
 import co.paralleluniverse.fibers.Suspendable
 import com.stefano.corda.deposits.DepositState
-import com.stefano.corda.deposits.utils.generateSpendAvoidingDuplicateMoves
 import net.corda.confidential.IdentitySyncFlow
 import net.corda.core.contracts.Amount
 import net.corda.core.contracts.ContractState
@@ -12,6 +11,7 @@ import net.corda.core.transactions.TransactionBuilder
 import net.corda.core.utilities.ProgressTracker
 import net.corda.core.utilities.unwrap
 import net.corda.finance.contracts.asset.Cash
+import net.corda.finance.contracts.asset.PartyAndAmount
 
 
 object RefundInstructionFlow {
@@ -21,6 +21,7 @@ object RefundInstructionFlow {
     @StartableByRPC
     class Initiator(val proposedDeposit: DepositState,
                     val partialTx: TransactionBuilder) : FlowLogic<TransactionBuilder>() {
+
 
         override val progressTracker = tracker()
 
@@ -37,6 +38,7 @@ object RefundInstructionFlow {
                     REQUESTING_CASH_MOVEMENT,
                     VERIFYING_CASH_MOVEMENT
             )
+
         }
 
         @Suspendable
@@ -89,25 +91,27 @@ object RefundInstructionFlow {
         @Suspendable
         override fun call() {
             progressTracker.currentStep = RECEIVING_TX;
-            var proposedTransaction = counterpartySession.receive<TransactionBuilder>().unwrap { it };
+            val proposedTransaction = counterpartySession.receive<TransactionBuilder>().unwrap { it };
             progressTracker.currentStep = RECEIVING_REFUND_INFO
             val propopsedOutputState = counterpartySession.receive<DepositState>().unwrap { it };
-            val deductionsTotal = (propopsedOutputState.landlordDeductions?.sumByLong { it.deductionAmount.quantity })
-            var tenantAmount = propopsedOutputState.depositAmount;
-            deductionsTotal?.let { toSubstract ->
-                tenantAmount = tenantAmount.minus(Amount(toSubstract, propopsedOutputState.depositAmount.token))
+
+            val deductionAmount = (propopsedOutputState.landlordDeductions?.sumByLong { it.deductionAmount.quantity })?.let {
+                Amount(it, propopsedOutputState.depositAmount.token)
             }
-            progressTracker.currentStep = ADDING_TENANT_CASH_PAYMENT
-            if (tenantAmount.compareTo(Amount(0, propopsedOutputState.depositAmount.token)) > 0) {
-                println("I AM GOING TO REFUND: $tenantAmount TO TENANT ")
-                proposedTransaction = Cash.Companion.generateSpendAvoidingDuplicateMoves(serviceHub, proposedTransaction,
-                        tenantAmount, propopsedOutputState.tenant)
+
+            val amountsToSend = deductionAmount?.let {
+                val tenantAmount = propopsedOutputState.depositAmount.minus(deductionAmount);
+                val landlordAmount = Amount(0, propopsedOutputState.depositAmount.token).plus(deductionAmount);
+                setOf(
+                        PartyAndAmount(propopsedOutputState.landlord, landlordAmount),
+                        PartyAndAmount(propopsedOutputState.tenant, tenantAmount)
+                ).filter { it.amount.quantity > 0 }
             }
-            deductionsTotal?.let {
+
+            amountsToSend?.let {
+                progressTracker.currentStep = ADDING_TENANT_CASH_PAYMENT
                 progressTracker.currentStep = ADDING_LANDLORD_CASH_PAYMENT
-                val landLordAmount = propopsedOutputState.depositAmount.minus(tenantAmount)
-                println("I AM GOING TO REFUND: $landLordAmount TO LANDLORD ")
-                proposedTransaction = Cash.Companion.generateSpendAvoidingDuplicateMoves(serviceHub, proposedTransaction, landLordAmount, propopsedOutputState.landlord)
+                Cash.generateSpend(serviceHub, proposedTransaction, amountsToSend)
             }
 
             progressTracker.currentStep = SYNCING_IDENTITIES
