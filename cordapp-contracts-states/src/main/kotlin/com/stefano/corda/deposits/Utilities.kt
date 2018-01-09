@@ -4,10 +4,10 @@ import net.corda.core.contracts.requireThat
 import kotlin.reflect.KProperty
 import kotlin.reflect.full.memberProperties
 
-fun <T : Any> Collection<T>.containsAllExcluding(toCheck: Collection<T>, toExclude: Set<KProperty<Any?>>) : Boolean{
+fun <T : Any> Collection<T>.containsAllExcluding(toCheck: Collection<T>, toExclude: Set<KProperty<Any?>>): Boolean {
     loopOverSmall@ for (t in toCheck) {
         for (other in this) {
-            if (t.isEqualToExcluding(other, toExclude)){
+            if (t.isEqualToExcluding(other, toExclude)) {
                 break@loopOverSmall;
             }
         }
@@ -21,19 +21,21 @@ fun <T : Any> T.isEqualToExcluding(thing: T, toExclude: Set<KProperty<Any?>>): B
     return areEqualToExcluding(this, thing, toExclude);
 }
 
-fun <T : Any> areEqualToExcluding(input1: T, input2: T, propertiesToExclude: Set<KProperty<Any?>>) : Boolean {
+fun <T : Any> areEqualToExcluding(input1: T, input2: T, propertiesToExclude: Set<KProperty<Any?>>): Boolean {
     val kClass = input1::class
     requireThat {
         "must be a data class" using (kClass.isData)
     }
-    val declaredMemberProperties : Collection<KProperty<Any?>> = kClass.memberProperties
+
+
+    val declaredMemberProperties: Collection<KProperty<Any?>> = kClass.memberProperties
     for (declaredMemberProperty in declaredMemberProperties) {
-        if (propertiesToExclude.contains(declaredMemberProperty)){
+        if (propertiesToExclude.contains(declaredMemberProperty)) {
             continue;
-        }else{
+        } else {
             val result1 = declaredMemberProperty.call(input1)
             val result2 = declaredMemberProperty.call(input2)
-            if (result1 != result2){
+            if (result1 != result2) {
                 return false
             }
         }
