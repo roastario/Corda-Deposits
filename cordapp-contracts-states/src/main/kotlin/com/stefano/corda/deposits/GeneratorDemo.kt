@@ -1,12 +1,16 @@
 package com.stefano.corda.deposits
 
-import com.squareup.kotlinpoet.*
+import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.TypeSpec
 import com.stefano.corda.deposits.GeneratedWorkFlow.Companion.getEnd
+import com.stefano.corda.deposits.GeneratedWorkFlow.Companion.inOrder
+import com.stefano.corda.deposits.GeneratedWorkFlow.Companion.reversedOrder
 import net.corda.core.contracts.LinearState
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.identity.AbstractParty
 import java.util.*
-import kotlin.collections.HashMap
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty
 
@@ -49,21 +53,52 @@ fun <T : LinearState> wrap(stateClass: KClass<T>): ContinuingTransition<T> {
     return ContinuingTransition(stateClass, null, "start", setOf(), null, null)
 }
 
-class GeneratedWorkFlow<T : LinearState>(val start: ContinuingTransition<T>, val end: ContinuingTransition<T> = getEnd(start)) {
-
+class GeneratedWorkFlow<T : LinearState>(val start: ContinuingTransition<T>,
+                                         val end: ContinuingTransition<T> = getEnd(start)
+) {
 
     object Companion {
         fun <T : LinearState> getEnd(start: ContinuingTransition<T>): ContinuingTransition<T> {
-            var next: ContinuingTransition<T>? = start;
-            var previous: ContinuingTransition<T>? = null
-            while (next != null) {
-                previous = next;
-                next = next.nextStage;
-            }
-            return previous!!;
+            return inOrder(start).last()
+        }
+
+
+        internal fun <T : LinearState> inOrder(toStartFrom: ContinuingTransition<T>): Iterable<ContinuingTransition<T>> {
+            return Iterable({
+                object : Iterator<ContinuingTransition<T>> {
+                    var next: ContinuingTransition<T>? = toStartFrom;
+                    override fun hasNext(): Boolean {
+                        return next != null
+                    }
+
+                    override fun next(): ContinuingTransition<T> {
+                        val current = next;
+                        next = next!!.nextStage;
+                        return current!!;
+                    }
+                }
+            });
+        }
+
+
+        internal fun <T : LinearState> reversedOrder(toStartFrom: ContinuingTransition<T>,
+                                                     toEndAt: ContinuingTransition<T>?): Iterable<ContinuingTransition<T>> {
+            return Iterable({
+                object : Iterator<ContinuingTransition<T>> {
+                    var previous: ContinuingTransition<T>? = toStartFrom;
+                    override fun hasNext(): Boolean {
+                        return previous != null && previous != toEndAt
+                    }
+
+                    override fun next(): ContinuingTransition<T> {
+                        val current = previous;
+                        previous = previous!!.previousState;
+                        return current!!;
+                    }
+                }
+            });
         }
     }
-
 
     fun printOutFlow(): GeneratedWorkFlow<T> {
         var next: ContinuingTransition<T>? = start;
@@ -73,45 +108,11 @@ class GeneratedWorkFlow<T : LinearState>(val start: ContinuingTransition<T>, val
             previous = next;
             next = next.nextStage;
         }
-
         return this;
     }
 
-    private fun inOrder(toStartFrom: ContinuingTransition<T>): Iterable<ContinuingTransition<T>> {
-        return Iterable<ContinuingTransition<T>>({
-            object : Iterator<ContinuingTransition<T>> {
-                var next: ContinuingTransition<T>? = toStartFrom;
-                override fun hasNext(): Boolean {
-                    return next != null
-                }
 
-                override fun next(): ContinuingTransition<T> {
-                    val current = next;
-                    next = next!!.nextStage;
-                    return current!!;
-                }
-            }
-        });
-    }
 
-    private fun reversedOrder(toStartFrom: ContinuingTransition<T>, toEndAt: ContinuingTransition<T>?): Iterable<ContinuingTransition<T>> {
-
-        return Iterable({
-            object : Iterator<ContinuingTransition<T>> {
-                var previous: ContinuingTransition<T>? = toStartFrom;
-                override fun hasNext(): Boolean {
-                    return previous != null && previous != toEndAt
-                }
-
-                override fun next(): ContinuingTransition<T> {
-                    val current = previous;
-                    previous = previous!!.previousState;
-                    return current!!;
-                }
-            }
-        });
-
-    }
 
     fun generate() {
         val file = FileSpec.builder(start.clazz.java.`package`.name, start.clazz.simpleName + "Checks")
@@ -169,7 +170,7 @@ class GeneratedWorkFlow<T : LinearState>(val start: ContinuingTransition<T>, val
         val functionBuilder = FunSpec.builder("getStage").addParameter("toCheck", start.clazz)
         reversedOrder(end, start).forEach { stage ->
             functionBuilder.beginControlFlow("if (" + buildStageCheckName(stage) + "(toCheck))")
-            functionBuilder.addStatement("return " + buildEnumTypeNameForState() + "." + buildEnumConstantForStageName(stage))
+            functionBuilder.addStatement("return " + buildQualifiedEnum(stage))
             functionBuilder.endControlFlow()
         }
 
@@ -187,7 +188,7 @@ class GeneratedWorkFlow<T : LinearState>(val start: ContinuingTransition<T>, val
 
 
         reversedOrder(end, null).forEach { stage ->
-            functionBuilder.beginControlFlow("if (getStage(input) === %L)", buildEnumTypeNameForState() + "." + buildEnumConstantForStageName(stage))
+            functionBuilder.beginControlFlow("if (getStage(input) === %L)", buildQualifiedEnum(stage))
             var returnStatement = "return getStage(output) === %L";
             stage.nextStage?.let { nextStage ->
                 nextStage.partyAllowedToTransition?.let { transitionTokenGetter ->
@@ -195,13 +196,16 @@ class GeneratedWorkFlow<T : LinearState>(val start: ContinuingTransition<T>, val
                             " && " + stage.clazz.simpleName + "::" + transitionTokenGetter.name +
                             ".get(input).equals(transitionToken);"
                 }
-                functionBuilder.addStatement(returnStatement, buildEnumTypeNameForState() + "." + buildEnumConstantForStageName(nextStage))
+                functionBuilder.addStatement(returnStatement, buildQualifiedEnum(nextStage))
             }
             functionBuilder.endControlFlow()
         }
         functionBuilder.addStatement("throw %T()", IllegalStateException::class)
         fileSpec.addFunction(functionBuilder.build())
     }
+
+    private fun buildQualifiedEnum(nextStage: ContinuingTransition<T>) =
+            buildEnumTypeNameForState() + "." + buildEnumConstantForStageName(nextStage)
 }
 
 fun main(args: Array<String>) {
